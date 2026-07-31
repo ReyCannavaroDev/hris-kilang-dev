@@ -25,9 +25,62 @@ use Carbon\Carbon;
 use Str;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class PerhitunganGaji
 {
+    private function getBpjsBasis($kary = null, $date_from = null)
+    {
+        $fallback = (float) (m_general::where('group', 'UMSK')
+            ->where('is_active', true)
+            ->orderByDesc('id')
+            ->value('value') ?? 3531361);
+
+        try {
+            if (!Schema::hasTable('m_bpjs')) {
+                return $fallback;
+            }
+
+            $payrollDate = $date_from ? Carbon::parse($date_from)->format('Y-m-d') : Carbon::now()->format('Y-m-d');
+            $tahun = Carbon::parse($payrollDate)->format('Y');
+
+            $query = DB::table('m_bpjs')
+                ->where('is_active', true)
+                ->where('tahun', $tahun)
+                ->whereIn('jenis', ['UMSK', 'UMK'])
+                ->where(function ($q) use ($payrollDate) {
+                    $q->whereNull('effective_from')->orWhere('effective_from', '<=', $payrollDate);
+                })
+                ->where(function ($q) use ($payrollDate) {
+                    $q->whereNull('effective_to')->orWhere('effective_to', '>=', $payrollDate);
+                });
+
+            if (@$kary->m_comp_id) {
+                $query->where(function ($q) use ($kary) {
+                    $q->where('m_comp_id', $kary->m_comp_id)->orWhereNull('m_comp_id');
+                });
+            }
+
+            if (@$kary->m_dir_id) {
+                $query->where(function ($q) use ($kary) {
+                    $q->where('m_dir_id', $kary->m_dir_id)->orWhereNull('m_dir_id');
+                });
+            }
+
+            $nominal = $query
+                ->orderByRaw('CASE WHEN m_comp_id IS NULL THEN 1 ELSE 0 END')
+                ->orderByRaw('CASE WHEN m_dir_id IS NULL THEN 1 ELSE 0 END')
+                ->orderByDesc('is_default')
+                ->orderByRaw("CASE WHEN jenis = 'UMSK' THEN 0 WHEN jenis = 'UMK' THEN 1 ELSE 2 END")
+                ->orderByDesc('id')
+                ->value('nominal');
+
+            return $nominal ? (float) $nominal : $fallback;
+        } catch (\Throwable $e) {
+            return $fallback;
+        }
+    }
+
     // public function factorSalary($standart_gaji, $kary = null, $periode = null)
     // {
     //     $firstDayOfMonth = "$periode-01";
@@ -6351,7 +6404,7 @@ class PerhitunganGaji
 
         if ($bpjs->isNotEmpty()) {
             foreach ($bpjs as $data) {
-                $umsk = m_general::where('group', 'UMSK')->first()->value ?? 3531361;
+                $umsk = $this->getBpjsBasis($kary, $date_from);
                 $value = $data->value / 100 * $umsk;
                 $subtot_2 += $value;
                 $defaultColumns[] = [
