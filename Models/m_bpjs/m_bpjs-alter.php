@@ -9,10 +9,58 @@ class mbpjs extends Migration
 
     public function up()
     {
-        Schema::table($this->tableName, function (Blueprint $table) {
-            //$table->string('_existColumnName_')->change();
-            //$table->string('_columnName_');
-            //$table->dropColumn(['_columnName_']);
-        });
+        if (!Schema::hasTable($this->tableName)) {
+            Schema::create($this->tableName, function (Blueprint $table) {
+                $table->id()->from(1);
+                $table->bigInteger('kota_id')->comment('{"src":"m_general.id"}')->nullable();
+                $table->string('jenis', 20)->default('UMK');
+                $table->integer('tahun');
+                $table->decimal('nominal', 12, 2);
+                $table->date('effective_from')->nullable();
+                $table->date('effective_to')->nullable();
+                $table->boolean('is_default')->default(0);
+                $table->text('desc')->nullable();
+                $table->boolean('is_active')->default(1);
+                $table->timestamps();
+            });
+        } else {
+            Schema::table($this->tableName, function (Blueprint $table) {
+                if (!Schema::hasColumn('m_bpjs', 'kota_id')) {
+                    $table->bigInteger('kota_id')->comment('{"src":"m_general.id"}')->nullable();
+                }
+                if (!Schema::hasColumn('m_bpjs', 'jenis')) {
+                    $table->string('jenis', 20)->default('UMK');
+                }
+                if (!Schema::hasColumn('m_bpjs', 'tahun')) {
+                    $table->integer('tahun')->nullable();
+                }
+                if (!Schema::hasColumn('m_bpjs', 'nominal')) {
+                    $table->decimal('nominal', 12, 2)->default(0);
+                }
+                if (!Schema::hasColumn('m_bpjs', 'effective_from')) {
+                    $table->date('effective_from')->nullable();
+                }
+                if (!Schema::hasColumn('m_bpjs', 'effective_to')) {
+                    $table->date('effective_to')->nullable();
+                }
+                if (!Schema::hasColumn('m_bpjs', 'is_default')) {
+                    $table->boolean('is_default')->default(0);
+                }
+                if (!Schema::hasColumn('m_bpjs', 'desc')) {
+                    $table->text('desc')->nullable();
+                }
+                if (!Schema::hasColumn('m_bpjs', 'is_active')) {
+                    $table->boolean('is_active')->default(1);
+                }
+                if (!Schema::hasColumn('m_bpjs', 'created_at')) {
+                    $table->timestamp('created_at')->nullable();
+                }
+                if (!Schema::hasColumn('m_bpjs', 'updated_at')) {
+                    $table->timestamp('updated_at')->nullable();
+                }
+            });
+        }
+
+        \DB::statement('CREATE INDEX IF NOT EXISTS m_bpjs_lookup_index ON m_bpjs (kota_id, tahun, jenis, is_active)');
     }
 }

@@ -55,21 +55,7 @@ class PerhitunganGaji
                     $q->whereNull('effective_to')->orWhere('effective_to', '>=', $payrollDate);
                 });
 
-            if (@$kary->m_comp_id) {
-                $query->where(function ($q) use ($kary) {
-                    $q->where('m_comp_id', $kary->m_comp_id)->orWhereNull('m_comp_id');
-                });
-            }
-
-            if (@$kary->m_dir_id) {
-                $query->where(function ($q) use ($kary) {
-                    $q->where('m_dir_id', $kary->m_dir_id)->orWhereNull('m_dir_id');
-                });
-            }
-
             $nominal = $query
-                ->orderByRaw('CASE WHEN m_comp_id IS NULL THEN 1 ELSE 0 END')
-                ->orderByRaw('CASE WHEN m_dir_id IS NULL THEN 1 ELSE 0 END')
                 ->orderByDesc('is_default')
                 ->orderByRaw("CASE WHEN jenis = 'UMSK' THEN 0 WHEN jenis = 'UMK' THEN 1 ELSE 2 END")
                 ->orderByDesc('id')
