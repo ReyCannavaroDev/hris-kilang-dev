@@ -15,21 +15,21 @@ class m_bpjs extends Model
         "created_at" => "datetime:d\/m\/Y H:i",
         "updated_at" => "datetime:d\/m\/Y H:i"
     ];
-    protected $fillable = ["kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active"];
+    protected $fillable = ["m_comp_id","m_dir_id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","creator_id","last_editor_id"];
 
-    public $columns     = ["id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","created_at","updated_at"];
-    public $columnsFull = ["id:bigint","kota_id:bigint","jenis:string:20","tahun:integer","nominal:decimal","effective_from:date","effective_to:date","is_default:boolean","desc:text","is_active:boolean","created_at:datetime","updated_at:datetime"];
+    public $columns     = ["id","m_comp_id","m_dir_id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","creator_id","last_editor_id","created_at","updated_at"];
+    public $columnsFull = ["id:bigint","m_comp_id:bigint","m_dir_id:bigint","kota_id:bigint","jenis:string:20","tahun:integer","nominal:decimal","effective_from:date","effective_to:date","is_default:boolean","desc:text","is_active:boolean","creator_id:bigint","last_editor_id:bigint","created_at:datetime","updated_at:datetime"];
     public $rules       = [];
-    public $joins       = ["m_general.id=m_bpjs.kota_id"];
+    public $joins       = ["m_comp.id=m_bpjs.m_comp_id","m_dir.id=m_bpjs.m_dir_id","m_general.id=m_bpjs.kota_id","default_users.id=m_bpjs.creator_id","default_users.id=m_bpjs.last_editor_id"];
     public $details     = [];
     public $heirs       = [];
     public $detailsChild= [];
     public $detailsHeirs= [];
     public $unique      = [];
     public $required    = ["jenis","tahun","nominal","is_active"];
-    public $createable  = ["kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active"];
-    public $updateable  = ["kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active"];
-    public $searchable  = ["id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","created_at","updated_at"];
+    public $createable  = ["m_comp_id","m_dir_id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","creator_id","last_editor_id"];
+    public $updateable  = ["m_comp_id","m_dir_id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","creator_id","last_editor_id"];
+    public $searchable  = ["id","m_comp_id","m_dir_id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","creator_id","last_editor_id","created_at","updated_at"];
     public $deleteable  = true;
     public $cascade     = true;
     public $deleteOnUse = false;
