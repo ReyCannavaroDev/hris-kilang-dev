@@ -6276,22 +6276,18 @@ class PerhitunganGaji
                             //gaji pokok sudah sama ganti cuti
                             $total_hari_gapok = $presensi['count'];
 
-                            //gaji maksimal dalam 1 periode
-                            // $expected_salary = $hari_kerja * $nominal_hari_biasa;
-                            $expected_salary = 26 * $nominal_hari_biasa;
-                            $absen = $presensi['count_no_record_date'];
+                            // gaji pokok mengikuti jumlah hari kerja aktual pada presensi
+                            $expected_salary = $total_hari_gapok * $nominal_hari_biasa;
 
                             $defaultColumns[] = [
                                 'label' =>  'Gaji Pokok - ' . ($total_hari_gapok) . ($d->tipe_perhitungan == "MENIT" ? ' Menit Kerja' : ' Hari Kerja'),
                                 'factor' => '+',
-                                // 'value' => $total_hari_gapok * $nominal_hari_biasa,
-                                'value' => $expected_salary - ($absen * $nominal_hari_biasa),
+                                'value' => $expected_salary,
                                 'type' => 'BULANAN',
                                 'can_adjust' => 1
                             ];
 
-                            // $subtot_1 = $total_hari_gapok * $nominal_hari_biasa;
-                            $subtot_1 = $expected_salary - ($absen * $nominal_hari_biasa);
+                            $subtot_1 = $expected_salary;
                         }
                         if ($t_cuti_approved > 0) {
                             $defaultColumns[] = [
