@@ -11,7 +11,7 @@ class m_bpjs extends Model
 
     protected $table    = 'm_bpjs';
     protected $guarded  = ["id"];
-    protected $casts    = [
+    public $casts    = [
         "created_at" => "datetime:d\/m\/Y H:i",
         "updated_at" => "datetime:d\/m\/Y H:i"
     ];
