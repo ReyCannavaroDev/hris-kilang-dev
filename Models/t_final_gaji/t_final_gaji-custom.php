@@ -112,8 +112,7 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                 'nomor' => $this->helper->generateNomor('KODE FINAL GAJI'),
                 'periode_awal' => $data['periode_awal'],
                 'periode_akhir' => $data['periode_akhir'],
-                //'total_pengeluaran_gaji' => $data['total_pengeluaran_gaji'],
-                'total_pengeluaran_gaji' => array_sum(array_column($data['t_final_gaji_det'], 'total_gaji')),
+                'total_pengeluaran_gaji' => $data['total_pengeluaran_gaji'] ?? array_sum(array_column($data['t_final_gaji_det'], 'netto')),
                 'desc' => $data['desc'],
                 'status' => $data['status'] ?? "DRAFT",
                 'type_perhitungan' => $data['type_perhitungan']

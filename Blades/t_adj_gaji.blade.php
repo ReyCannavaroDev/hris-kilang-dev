@@ -179,7 +179,7 @@
         <button v-show="actionText?.toLowerCase() !== 'edit'" :disabled="!actionText" @click="generatePerhitungan" class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-[18px] py-[8px] rounded-[4px] ">
           <Icon fa="bolt"/> Generate
         </button>
-        <button v-show="actionText?.toLowerCase() !== 'edit'" :disabled="!actionText" @click="detailArr = []" class="bg-[#EF4444] hover:bg-[#ed3232] text-white text-sm px-[18px] py-[8px] rounded-[4px] ">
+        <button v-show="actionText?.toLowerCase() !== 'edit'" :disabled="!actionText" @click="clearDetail" class="bg-[#EF4444] hover:bg-[#ed3232] text-white text-sm px-[18px] py-[8px] rounded-[4px] ">
           Hapus Detail
         </button>
       </div>

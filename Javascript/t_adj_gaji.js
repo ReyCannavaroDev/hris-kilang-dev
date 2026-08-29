@@ -35,7 +35,12 @@ onBeforeMount(() => {
 })
 
 function formatRupiah(amount) {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(amount);
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount ?? 0);
 }
 
 
@@ -95,8 +100,14 @@ const checkTglEdDate = (v) => {
 };
 
 const removeDetail = (index) => {
-  detailArr.value.splice(index, 1)
+  detailArr.value.splice(index, 1);
+  summaryPengeluaranGaji();
 };
+
+function clearDetail() {
+  detailArr.value = [];
+  summaryPengeluaranGaji();
+}
 
 function closeModal() {
   detailArrOpen.items = []
@@ -505,15 +516,11 @@ function saveModal() {
 }
 
 function summaryPengeluaranGaji() {
-  values.total_pengeluaran_gaji = detailArr.value.reduce((a, b) => {
-    const netto = Number(b.netto);
-    if (!isNaN(netto)) {
-      return a + netto;
-    } else {
-      console.warn(`Skipping non-numeric value: ${b.netto}`);
-      return a;
-    }
-  }, 0)
+  const sum = detailArr.value.reduce((total, item) => {
+    const netto = parseFloat(item.netto);
+    return total + (!isNaN(netto) ? netto : 0);
+  }, 0);
+  values.total_pengeluaran_gaji = Number(sum.toFixed(2));
 }
 
 async function onSave() {
