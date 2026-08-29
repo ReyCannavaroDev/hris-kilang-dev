@@ -164,11 +164,11 @@ async function onSave() {
     formErrors.value = {}
 
     const payload = { ...values }
-    payload.kota_id = payload.kota_id || null
+    payload.kota_id = payload.kota_id ? Number(payload.kota_id) : null
     payload.nominal = Number(payload.nominal || 0)
     payload.tahun = Number(payload.tahun || new Date().getFullYear())
-    payload.is_default = !!payload.is_default
-    payload.is_active = !!payload.is_active
+    payload.is_default = payload.is_default ? 1 : 0
+    payload.is_active = payload.is_active ? 1 : 0
 
     const isEdit = !!(route.params.id && route.params.id !== 'create')
     const dataURL = isEdit

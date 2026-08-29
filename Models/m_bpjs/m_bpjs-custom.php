@@ -2,38 +2,8 @@
 
 namespace App\Models\CustomModels;
 
-use Illuminate\Database\Eloquent\Model;
-use App\Traits\ModelTrait;
-
-class m_bpjs extends Model
+class m_bpjs extends \App\Models\BasicModels\m_bpjs
 {
-    use ModelTrait;
-
-    protected $table    = 'm_bpjs';
-    protected $guarded  = ["id"];
-    public $casts    = [
-        "created_at" => "datetime:d\/m\/Y H:i",
-        "updated_at" => "datetime:d\/m\/Y H:i"
-    ];
-    protected $fillable = ["m_comp_id","m_dir_id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","creator_id","last_editor_id"];
-
-    public $columns     = ["id","m_comp_id","m_dir_id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","creator_id","last_editor_id","created_at","updated_at"];
-    public $columnsFull = ["id:bigint","m_comp_id:bigint","m_dir_id:bigint","kota_id:bigint","jenis:string:20","tahun:integer","nominal:decimal","effective_from:date","effective_to:date","is_default:boolean","desc:text","is_active:boolean","creator_id:bigint","last_editor_id:bigint","created_at:datetime","updated_at:datetime"];
-    public $rules       = [];
-    public $joins       = ["m_comp.id=m_bpjs.m_comp_id","m_dir.id=m_bpjs.m_dir_id","m_general.id=m_bpjs.kota_id","default_users.id=m_bpjs.creator_id","default_users.id=m_bpjs.last_editor_id"];
-    public $details     = [];
-    public $heirs       = [];
-    public $detailsChild= [];
-    public $detailsHeirs= [];
-    public $unique      = [];
-    public $required    = ["jenis","tahun","nominal","is_active"];
-    public $createable  = ["m_comp_id","m_dir_id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","creator_id","last_editor_id"];
-    public $updateable  = ["m_comp_id","m_dir_id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","creator_id","last_editor_id"];
-    public $searchable  = ["id","m_comp_id","m_dir_id","kota_id","jenis","tahun","nominal","effective_from","effective_to","is_default","desc","is_active","creator_id","last_editor_id","created_at","updated_at"];
-    public $deleteable  = true;
-    public $cascade     = true;
-    public $deleteOnUse = false;
-
     public function __construct()
     {
         parent::__construct();
@@ -54,10 +24,15 @@ class m_bpjs extends Model
 
     public function createBefore($model, $arrayData, $metaData, $id = null)
     {
+        $isDefault = isset($arrayData['is_default']) ? filter_var($arrayData['is_default'], FILTER_VALIDATE_BOOLEAN) : false;
+        $isActive = isset($arrayData['is_active']) ? filter_var($arrayData['is_active'], FILTER_VALIDATE_BOOLEAN) : true;
+
         return [
             "model" => $model,
             "data"  => array_merge($arrayData, [
-                'jenis' => strtoupper($arrayData['jenis'] ?? 'UMK'),
+                'jenis'      => strtoupper($arrayData['jenis'] ?? 'UMK'),
+                'is_default' => $isDefault ? 1 : 0,
+                'is_active'  => $isActive ? 1 : 0,
             ])
         ];
     }
@@ -66,6 +41,12 @@ class m_bpjs extends Model
     {
         if (isset($arrayData['jenis'])) {
             $arrayData['jenis'] = strtoupper($arrayData['jenis']);
+        }
+        if (isset($arrayData['is_default'])) {
+            $arrayData['is_default'] = filter_var($arrayData['is_default'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        }
+        if (isset($arrayData['is_active'])) {
+            $arrayData['is_active'] = filter_var($arrayData['is_active'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
         }
 
         return [
