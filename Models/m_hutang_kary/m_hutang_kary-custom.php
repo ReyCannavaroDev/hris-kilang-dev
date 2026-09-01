@@ -182,20 +182,14 @@ class m_hutang_kary extends \App\Models\BasicModels\m_hutang_kary
                     $q->where('m_kary_id', $this->m_kary_id);
                 })
             ->sum('value');
-        // $total_hutang = $this->where('jenis_potongan_id', $this->jenis_potongan_id)
-        //     ->where('m_kary_id', $this->m_kary_id)
-        //     ->where('is_active', true)
-        //     ->sum('total_hutang') ?? 0;
 
-        // $sisa = $this->total_hutang - $paid_debt;
-        // return $sisa;
         $total_hutang = static::query()
         ->where('jenis_potongan_id', $this->jenis_potongan_id)
         ->where('m_kary_id', $this->m_kary_id)
         ->where('is_active', true)
         ->sum('total_hutang') ?? 0;
         
-        return $total_hutang - $paid_debt;
+        return max(0, $total_hutang - $paid_debt);
     }
 
     public function custom_pinjamanMandiri($req)

@@ -442,7 +442,11 @@ OR (? BETWEEN tc.date_from AND tc.date_to)
         //  $sisa_hutang += $hutang->getSisaDebt();
         //}
         $sisa_hutang = 0;
-        $getHutang = m_hutang_kary::where('m_kary_id', $karyawan->id)->where('is_active', true)->get();
+        $getHutang = m_hutang_kary::where('m_kary_id', $karyawan->id)
+            ->where('is_active', true)
+            ->get()
+            ->unique('jenis_potongan_id');
+
         if($getHutang->count() > 0){
           foreach($getHutang as $hutang){
             $sisa_hutang += $hutang->getSisaDebt();

@@ -1524,14 +1524,14 @@ class m_kary extends \App\Models\BasicModels\m_kary
                 foreach ($item->m_hutang_kary as $hutang) {
                     $t_potongan = t_potongan::where('m_kary_id', $item->id)
                         ->where('jenis_potongan_id', $hutang->jenis_potongan_id)
-                        ->first();
+                        ->pluck('id');
 
                     $paid = 0;
-                    if ($t_potongan) {
+                    if ($t_potongan->isNotEmpty()) {
                         $paid = t_final_gaji_det_rincian::whereHas('t_final_gaji_det', function($q) use ($item) {
                                 $q->where('m_kary_id', $item->id);
                             })
-                            ->where('t_potongan_id', $t_potongan->id)
+                            ->whereIn('t_potongan_id', $t_potongan)
                             ->sum('value');
                     }
 
@@ -1568,14 +1568,14 @@ class m_kary extends \App\Models\BasicModels\m_kary
                 foreach ($item->m_hutang_kary as $hutang) {
                     $t_potongan = t_potongan::where('m_kary_id', $item->id)
                         ->where('jenis_potongan_id', $hutang->jenis_potongan_id)
-                        ->first();
+                        ->pluck('id');
 
                     $paid = 0;
-                    if ($t_potongan) {
+                    if ($t_potongan->isNotEmpty()) {
                         $paid = t_final_gaji_det_rincian::whereHas('t_final_gaji_det', function($q) use ($item) {
                                 $q->where('m_kary_id', $item->id);
                             })
-                            ->where('t_potongan_id', $t_potongan->id)
+                            ->whereIn('t_potongan_id', $t_potongan)
                             ->sum('value');
                     }
 
