@@ -2476,6 +2476,8 @@ class PerhitunganGaji
                 '1E' => $this->factorSalaryOutsourceKary($kary, $date_from, $date_to, $isTunjangan, $grade),
                 '1F' => $this->factorSalaryOutsourceDriver($kary, $date_from, $date_to, $isTunjangan, $grade),
                 '1G' => $this->factorSalaryPersonalDriver($kary, $date_from, $date_to, $isTunjangan, $grade),
+                '1H' => $this->factorSalaryTeknisi($kary, $date_from, $date_to, $isTunjangan, $grade),
+                '1I' => $this->factorSalarySatpam($kary, $date_from, $date_to, $isTunjangan, $grade),
                 default => $this->factorSalaryManual($kary, $date_from, $date_to, $isTunjangan, $grade)
             };
 
@@ -6701,5 +6703,453 @@ class PerhitunganGaji
             DB::rollBack();
             return response()->json(['error' => 'Gagal: ' . $e->getMessage()], 500);
         }
+    }
+
+    public function factorSalaryTeknisi($kary, $date_from, $date_to, $isTunjangan, $kary_grade)
+    {
+        $grade = grade::where('id', $kary_grade)->with('treatments')->first();
+        $treatments = collect($grade['treatments'] ?? []);
+
+        $faktor = $treatments->where('is_month', true)
+            ->pluck('factor', 'keterangan')
+            ->mapWithKeys(function ($faktor, $keterangan) {
+                return [strtolower($keterangan) => $faktor];
+            })
+            ->toArray();
+
+        $bulanan = array_keys($faktor);
+        $defaultColumns = [];
+
+        if (!$kary) {
+            return $defaultColumns;
+        }
+
+        $t_kary_salary = t_kary_salary::selectRaw("m_kary_id, t_kary_salary.id, t_kary_salary.total, d.*, t_kary_salary.tipe_perhitungan")
+            ->join('t_kary_salary_det as d', 'd.t_kary_salary_id', 't_kary_salary.id')
+            ->where('m_kary_id', @$kary->id ?? 0)
+            ->where('t_kary_salary.is_active', true)
+            ->whereNotIn(\DB::raw('LOWER(d.keterangan)'), $bulanan)
+            ->whereRaw("LOWER(d.keterangan) NOT ILIKE '%potongan%'");
+
+        // Tunjangan Bulanan jika ada
+        $getTunjangan = t_kary_salary::selectRaw("m_kary_id, t_kary_salary.id, t_kary_salary.total, d.*")
+            ->join('t_kary_salary_det as d', 'd.t_kary_salary_id', 't_kary_salary.id')
+            ->where('m_kary_id', @$kary->id ?? 0)
+            ->whereIn(\DB::raw('LOWER(d.keterangan)'), $bulanan)
+            ->where('t_kary_salary.is_active', true)
+            ->get();
+
+        foreach ($getTunjangan as $single) {
+            $keteranganLower = strtolower($single['keterangan']);
+            $factor = $faktor[$keteranganLower] ?? '+';
+
+            $defaultColumns[] = [
+                'label' => $single['keterangan'] . ' (' . $factor . ')',
+                'factor' => $factor,
+                'value' => (float) $single['nominal'],
+                'type' => 'BULANAN',
+                'can_adjust' => 1,
+            ];
+        }
+
+        $t_potongan = t_potongan::with(['t_final_gaji_det_rincian'])
+            ->where('m_kary_id', @$kary->id ?? 0)
+            ->where(function ($q) use ($date_from, $date_to) {
+                $q->where('date_from', '<=', $date_to)
+                    ->where('date_to', '>=', $date_from);
+            })
+            ->where('status', 'POSTED')
+            ->get();
+
+        // Potongan dan Hutang
+        if ($t_potongan->count()) {
+            foreach ($t_potongan as $key => $d) {
+                $queryHutang = m_hutang_kary::where('m_kary_id', $d->m_kary_id)
+                    ->where('is_active', true);
+
+                $hasSpecificDebt = (clone $queryHutang)->where('t_potongan_id', $d->id)->exists();
+
+                if ($hasSpecificDebt) {
+                    $hutang = $queryHutang->where('t_potongan_id', $d->id)->sum('total_hutang');
+                } else {
+                    $hutang = $queryHutang->where('jenis_potongan_id', $d->jenis_potongan_id)->sum('total_hutang');
+                }
+
+                if ($hutang > 0) {
+                    $paid = t_final_gaji_det_rincian::join('t_final_gaji_det', 't_final_gaji_det.id', '=', 't_final_gaji_det_rincian.t_final_gaji_det_id')
+                        ->where('t_final_gaji_det.m_kary_id', $d->m_kary_id)
+                        ->where('t_final_gaji_det_rincian.t_potongan_id', $d->id)
+                        ->sum('t_final_gaji_det_rincian.value');
+
+                    $sisa = max($hutang - $paid, 0);
+
+                    if ($d->percentage) {
+                        $nilai_netto = ((float) $d->nilai * (float) $d->percentage) / 100;
+                    } else {
+                        $nilai_netto = (float) $d->nilai;
+                    }
+
+                    if ($sisa > 0) {
+                        if ($nilai_netto > $sisa) {
+                            $nilai_netto = $sisa;
+                        }
+                    } else {
+                        $nilai_netto = 0;
+                    }
+
+                    if ($nilai_netto > 0) {
+                        $defaultColumns[] = [
+                            'label' => "Potongan - $d->nomor ($d->keterangan)",
+                            'factor' => '-',
+                            'value' => $nilai_netto,
+                            'type' => 'BULANAN',
+                            'can_adjust' => 1,
+                            't_potongan_id' => $d->id,
+                        ];
+                    }
+                } else {
+                    if ($d->nilai > 0) {
+                        $defaultColumns[] = [
+                            'label' => "Potongan - $d->nomor ($d->keterangan)",
+                            'factor' => '-',
+                            'value' => $d->nilai,
+                            'type' => 'BULANAN',
+                            'can_adjust' => 1,
+                            't_potongan_id' => $d->id,
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Bonus
+        $t_bonus = t_bonus::where('m_kary_id', @$kary->id ?? 0)
+            ->whereRaw("date_from >= ? and date_to <= ?", [$date_from, $date_to])
+            ->where('status', 'POSTED')
+            ->get();
+
+        if (count($t_bonus)) {
+            foreach ($t_bonus as $d) {
+                $defaultColumns[] = [
+                    'label' => "Bonus - $d->nomor ($d->keterangan)",
+                    'factor' => '+',
+                    'value' => (float) $d->nilai,
+                    'type' => 'BULANAN',
+                    'can_adjust' => 1,
+                ];
+            }
+        }
+
+        // Komponen Gaji Pokok & Uang Makan dari t_kary_salary_det
+        $t_kary_salary = $t_kary_salary->get();
+        $gajiPokokNominal = 0;
+        $uangMakanPagiNominal = 0;
+        $uangMakanSiangNominal = 0;
+        $uangMakanSoreNominal = 0;
+
+        foreach ($t_kary_salary as $d) {
+            $keterangan = strtolower(trim(preg_replace('/\s+/', ' ', $d->keterangan ?? '')));
+            if ($keterangan === 'gaji pokok') {
+                $gajiPokokNominal = (float) $d->nominal;
+            } elseif ($keterangan === 'uang makan pagi') {
+                $uangMakanPagiNominal = (float) $d->nominal;
+            } elseif ($keterangan === 'uang makan siang') {
+                $uangMakanSiangNominal = (float) $d->nominal;
+            } elseif ($keterangan === 'uang makan sore') {
+                $uangMakanSoreNominal = (float) $d->nominal;
+            }
+        }
+
+        // Hitung Presensi Teknisi
+        $getUserId = default_users::where('m_kary_id', @$kary->id ?? 0)->first()->id ?? 0;
+        $presensiRecords = collect();
+
+        if ($getUserId) {
+            $presensiRecords = presensi_absensi::where('default_user_id', $getUserId)
+                ->whereBetween('tanggal', [$date_from, $date_to])
+                ->whereIn('status', ['ATTEND', 'WORKING', 'ATTEND NO CHECKOUT', 'RESUME WORK'])
+                ->orderBy('tanggal', 'asc')
+                ->get();
+        }
+
+        // Kelompokkan absensi per tanggal
+        $presensiByDate = $presensiRecords->groupBy('tanggal');
+        $totalHariHadir = $presensiByDate->count();
+
+        // 1. Gaji Pokok Harian (Total Hari Hadir * Nominal)
+        if ($totalHariHadir > 0 && $gajiPokokNominal > 0) {
+            $defaultColumns[] = [
+                'label' => "Gaji Pokok ($totalHariHadir Hari)",
+                'factor' => '+',
+                'value' => $totalHariHadir * $gajiPokokNominal,
+                'type' => 'HARIAN',
+                'can_adjust' => 1,
+            ];
+        }
+
+        // 2. Uang Makan Per Sesi
+        $countMakanPagi = 0;
+        $countMakanSiang = 0;
+        $countMakanSore = 0;
+
+        foreach ($presensiByDate as $tanggal => $records) {
+            $earliestCheckin = $records->whereNotNull('checkin_time')->pluck('checkin_time')->sort()->first();
+            $latestCheckout = $records->whereNotNull('checkout_time')->pluck('checkout_time')->sortDesc()->first();
+
+            // Uang Makan Pagi: checkin <= 08:15:00
+            if ($earliestCheckin && $earliestCheckin <= '08:15:00') {
+                $countMakanPagi++;
+            }
+
+            // Uang Makan Siang: checkout >= 13:00:00
+            if ($latestCheckout && $latestCheckout >= '13:00:00') {
+                $countMakanSiang++;
+            }
+
+            // Uang Makan Sore: checkout >= 17:00:00
+            if ($latestCheckout && $latestCheckout >= '17:00:00') {
+                $countMakanSore++;
+            }
+        }
+
+        if ($countMakanPagi > 0 && $uangMakanPagiNominal > 0) {
+            $defaultColumns[] = [
+                'label' => "Uang Makan Pagi ($countMakanPagi Hari)",
+                'factor' => '+',
+                'value' => $countMakanPagi * $uangMakanPagiNominal,
+                'type' => 'HARIAN',
+                'can_adjust' => 1,
+            ];
+        }
+
+        if ($countMakanSiang > 0 && $uangMakanSiangNominal > 0) {
+            $defaultColumns[] = [
+                'label' => "Uang Makan Siang ($countMakanSiang Hari)",
+                'factor' => '+',
+                'value' => $countMakanSiang * $uangMakanSiangNominal,
+                'type' => 'HARIAN',
+                'can_adjust' => 1,
+            ];
+        }
+
+        if ($countMakanSore > 0 && $uangMakanSoreNominal > 0) {
+            $defaultColumns[] = [
+                'label' => "Uang Makan Sore ($countMakanSore Hari)",
+                'factor' => '+',
+                'value' => $countMakanSore * $uangMakanSoreNominal,
+                'type' => 'HARIAN',
+                'can_adjust' => 1,
+            ];
+        }
+
+        return $defaultColumns;
+    }
+
+    public function factorSalarySatpam($kary, $date_from, $date_to, $isTunjangan, $kary_grade)
+    {
+        $grade = grade::where('id', $kary_grade)->with('treatments')->first();
+        $treatments = collect($grade['treatments'] ?? []);
+
+        $faktor = $treatments->where('is_month', true)
+            ->pluck('factor', 'keterangan')
+            ->mapWithKeys(function ($faktor, $keterangan) {
+                return [strtolower($keterangan) => $faktor];
+            })
+            ->toArray();
+
+        $bulanan = array_keys($faktor);
+        $defaultColumns = [];
+
+        if (!$kary) {
+            return $defaultColumns;
+        }
+
+        $t_kary_salary = t_kary_salary::selectRaw("m_kary_id, t_kary_salary.id, t_kary_salary.total, d.*, t_kary_salary.tipe_perhitungan")
+            ->join('t_kary_salary_det as d', 'd.t_kary_salary_id', 't_kary_salary.id')
+            ->where('m_kary_id', @$kary->id ?? 0)
+            ->where('t_kary_salary.is_active', true)
+            ->whereNotIn(\DB::raw('LOWER(d.keterangan)'), $bulanan)
+            ->whereRaw("LOWER(d.keterangan) NOT ILIKE '%potongan%'");
+
+        // Tunjangan Bulanan jika ada
+        $getTunjangan = t_kary_salary::selectRaw("m_kary_id, t_kary_salary.id, t_kary_salary.total, d.*")
+            ->join('t_kary_salary_det as d', 'd.t_kary_salary_id', 't_kary_salary.id')
+            ->where('m_kary_id', @$kary->id ?? 0)
+            ->whereIn(\DB::raw('LOWER(d.keterangan)'), $bulanan)
+            ->where('t_kary_salary.is_active', true)
+            ->get();
+
+        foreach ($getTunjangan as $single) {
+            $keteranganLower = strtolower($single['keterangan']);
+            $factor = $faktor[$keteranganLower] ?? '+';
+
+            $defaultColumns[] = [
+                'label' => $single['keterangan'] . ' (' . $factor . ')',
+                'factor' => $factor,
+                'value' => (float) $single['nominal'],
+                'type' => 'BULANAN',
+                'can_adjust' => 1,
+            ];
+        }
+
+        $t_potongan = t_potongan::with(['t_final_gaji_det_rincian'])
+            ->where('m_kary_id', @$kary->id ?? 0)
+            ->where(function ($q) use ($date_from, $date_to) {
+                $q->where('date_from', '<=', $date_to)
+                    ->where('date_to', '>=', $date_from);
+            })
+            ->where('status', 'POSTED')
+            ->get();
+
+        // Potongan dan Hutang
+        if ($t_potongan->count()) {
+            foreach ($t_potongan as $key => $d) {
+                $queryHutang = m_hutang_kary::where('m_kary_id', $d->m_kary_id)
+                    ->where('is_active', true);
+
+                $hasSpecificDebt = (clone $queryHutang)->where('t_potongan_id', $d->id)->exists();
+
+                if ($hasSpecificDebt) {
+                    $hutang = $queryHutang->where('t_potongan_id', $d->id)->sum('total_hutang');
+                } else {
+                    $hutang = $queryHutang->where('jenis_potongan_id', $d->jenis_potongan_id)->sum('total_hutang');
+                }
+
+                if ($hutang > 0) {
+                    $paid = t_final_gaji_det_rincian::join('t_final_gaji_det', 't_final_gaji_det.id', '=', 't_final_gaji_det_rincian.t_final_gaji_det_id')
+                        ->where('t_final_gaji_det.m_kary_id', $d->m_kary_id)
+                        ->where('t_final_gaji_det_rincian.t_potongan_id', $d->id)
+                        ->sum('t_final_gaji_det_rincian.value');
+
+                    $sisa = max($hutang - $paid, 0);
+
+                    if ($d->percentage) {
+                        $nilai_netto = ((float) $d->nilai * (float) $d->percentage) / 100;
+                    } else {
+                        $nilai_netto = (float) $d->nilai;
+                    }
+
+                    if ($sisa > 0) {
+                        if ($nilai_netto > $sisa) {
+                            $nilai_netto = $sisa;
+                        }
+                    } else {
+                        $nilai_netto = 0;
+                    }
+
+                    if ($nilai_netto > 0) {
+                        $defaultColumns[] = [
+                            'label' => "Potongan - $d->nomor ($d->keterangan)",
+                            'factor' => '-',
+                            'value' => $nilai_netto,
+                            'type' => 'BULANAN',
+                            'can_adjust' => 1,
+                            't_potongan_id' => $d->id,
+                        ];
+                    }
+                } else {
+                    if ($d->nilai > 0) {
+                        $defaultColumns[] = [
+                            'label' => "Potongan - $d->nomor ($d->keterangan)",
+                            'factor' => '-',
+                            'value' => $d->nilai,
+                            'type' => 'BULANAN',
+                            'can_adjust' => 1,
+                            't_potongan_id' => $d->id,
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Bonus
+        $t_bonus = t_bonus::where('m_kary_id', @$kary->id ?? 0)
+            ->whereRaw("date_from >= ? and date_to <= ?", [$date_from, $date_to])
+            ->where('status', 'POSTED')
+            ->get();
+
+        if (count($t_bonus)) {
+            foreach ($t_bonus as $d) {
+                $defaultColumns[] = [
+                    'label' => "Bonus - $d->nomor ($d->keterangan)",
+                    'factor' => '+',
+                    'value' => (float) $d->nilai,
+                    'type' => 'BULANAN',
+                    'can_adjust' => 1,
+                ];
+            }
+        }
+
+        // Komponen Gaji Pokok / Rate Shift jika diset
+        $t_kary_salary = $t_kary_salary->get();
+        $gajiPokokNominal = 0;
+        foreach ($t_kary_salary as $d) {
+            $keterangan = strtolower(trim(preg_replace('/\s+/', ' ', $d->keterangan ?? '')));
+            if ($keterangan === 'gaji pokok' || $keterangan === 'uang hadir' || $keterangan === 'jasa security') {
+                $gajiPokokNominal = (float) $d->nominal;
+            }
+        }
+
+        // Hitung Presensi Satpam
+        $getUserId = default_users::where('m_kary_id', @$kary->id ?? 0)->first()->id ?? 0;
+        $presensiRecords = collect();
+
+        if ($getUserId) {
+            $presensiRecords = presensi_absensi::where('default_user_id', $getUserId)
+                ->whereBetween('tanggal', [$date_from, $date_to])
+                ->whereIn('status', ['ATTEND', 'WORKING', 'ATTEND NO CHECKOUT', 'RESUME WORK'])
+                ->orderBy('tanggal', 'asc')
+                ->get();
+        }
+
+        $totalShiftHadir = $presensiRecords->count();
+
+        if ($totalShiftHadir > 0 && $gajiPokokNominal > 0) {
+            $defaultColumns[] = [
+                'label' => "Gaji / Hadir Satpam ($totalShiftHadir Shift)",
+                'factor' => '+',
+                'value' => $totalShiftHadir * $gajiPokokNominal,
+                'type' => 'HARIAN',
+                'can_adjust' => 1,
+            ];
+        }
+
+        // Hitung Denda Keterlambatan Tier per 15 Menit (Opsi A)
+        // Toleransi 1-10 min = 0, 11-15 min = 20k, 16-30 min = 40k, 31-45 min = 60k, dst
+        foreach ($presensiRecords as $rec) {
+            if ($rec->checkin_time) {
+                $checkinCarbon = \Carbon\Carbon::parse($rec->tanggal . ' ' . $rec->checkin_time);
+                $checkinHour = (int) \Carbon\Carbon::parse($rec->checkin_time)->format('H');
+
+                $shiftStart = null;
+                // Shift Pagi: 07:00:00 (rentang checkin pagi: 05:00 - 13:00)
+                if ($checkinHour >= 5 && $checkinHour <= 13) {
+                    $shiftStart = \Carbon\Carbon::parse($rec->tanggal . ' 07:00:00');
+                } 
+                // Shift Malam: 19:00:00 (rentang checkin malam: 17:00 - 23:59)
+                elseif ($checkinHour >= 17 && $checkinHour <= 23) {
+                    $shiftStart = \Carbon\Carbon::parse($rec->tanggal . ' 19:00:00');
+                }
+
+                if ($shiftStart && $checkinCarbon->greaterThan($shiftStart)) {
+                    $lateMinutes = $checkinCarbon->diffInMinutes($shiftStart);
+                    if ($lateMinutes > 10) {
+                        $tier = (int) ceil($lateMinutes / 15);
+                        $denda = $tier * 20000;
+                        $tglFormatted = \Carbon\Carbon::parse($rec->tanggal)->format('d/m/Y');
+
+                        $defaultColumns[] = [
+                            'label' => "Denda Telat Shift ($tglFormatted - Telat {$lateMinutes} Menit)",
+                            'factor' => '-',
+                            'value' => (float) $denda,
+                            'type' => 'BULANAN',
+                            'can_adjust' => 1,
+                        ];
+                    }
+                }
+            }
+        }
+
+        return $defaultColumns;
     }
 }
