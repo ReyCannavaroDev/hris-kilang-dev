@@ -1992,11 +1992,24 @@ class PerhitunganGaji
                             (float) $d->nominal / 8 / 60;
 
                         //denda pulang cepat
-                        if ($presensiMinute['leave_early'] > 0) {
+                        $leave_early_biasa = $presensiMinute['leave_early_biasa'] ?? ($presensiMinute['leave_early'] ?? 0);
+                        $leave_early_merah = $presensiMinute['leave_early_merah'] ?? 0;
+
+                        if ($leave_early_biasa > 0) {
                             $defaultColumns[] = [
-                                'label' => "Denda Pulang Cepat - " . $presensiMinute['leave_early'] . " Menit",
+                                'label' => "Denda Pulang Cepat - " . $leave_early_biasa . " Menit",
                                 'factor' => '-',
-                                'value' => $presensiMinute['leave_early'] * $gaji_menit,
+                                'value' => $leave_early_biasa * $gaji_menit,
+                                'type' => 'BULANAN',
+                                'can_adjust' => 1
+                            ];
+                        }
+
+                        if ($leave_early_merah > 0) {
+                            $defaultColumns[] = [
+                                'label' => "Denda Pulang Cepat Hari Merah - " . $leave_early_merah . " Menit",
+                                'factor' => '-',
+                                'value' => $leave_early_merah * ($gaji_menit * 2),
                                 'type' => 'BULANAN',
                                 'can_adjust' => 1
                             ];
@@ -2117,9 +2130,9 @@ class PerhitunganGaji
                         ];
                         continue;
                     }
-                    if ($keterangan === 'uang lembur hr merah') {
+                    if ($keterangan === 'uang lembur hr merah' || $keterangan === 'uang lembur hari merah' || (str_contains($keterangan, 'lembur') && (str_contains($keterangan, 'merah') || str_contains($keterangan, 'libur')))) {
 
-                        if ($presensi['kerja_di_hari_libur_count'] > 0) {
+                        if (($presensi['kerja_di_hari_libur_count'] ?? 0) > 0) {
                             $overtimeOnHoliday = $presensi['lembur_kerja_di_hari_libur'] ?? 0;
                         } else {
                             $overtimeOnHoliday = 0;
@@ -3377,7 +3390,6 @@ class PerhitunganGaji
         //     $total_menit = $mulai->diffInMinutes($akhir);
         // } else {
         //     $total_menit = null;
-        // }
         $total_menit = null;
 
         $workMinute = 0;
@@ -3386,7 +3398,11 @@ class PerhitunganGaji
         $overtimeMinute = 0;
         $lateMinute = 0;
         $leaveEarly = 0;
+        $leaveEarlyBiasa = 0;
+        $leaveEarlyMerah = 0;
         $leaveEarlyCount = 0;
+        $leaveEarlyCountBiasa = 0;
+        $leaveEarlyCountMerah = 0;
         $lateCount = 0;
         $limitDay = $total_menit ? $total_menit : 540;
         $limitDayWithoutBreak = $total_menit ? ($total_menit-60) : 480;
@@ -3403,7 +3419,11 @@ class PerhitunganGaji
                 'overtime_minute' => 0,
                 'late_minute' => 0,
                 'leave_early' => 0,
+                'leave_early_biasa' => 0,
+                'leave_early_merah' => 0,
                 'leave_early_count' => 0,
+                'leave_early_count_biasa' => 0,
+                'leave_early_count_merah' => 0,
                 'late_count' => 0,
                 'over_break_minute' => 0,
                 'over_break_minute_per_day' => 0,
@@ -3417,21 +3437,34 @@ class PerhitunganGaji
             ->map(fn($tanggal) => \Carbon::parse($tanggal)->toDateString())
             ->toArray();
 
+        $getLiburKary = t_libur::where('tanggal_mulai', '<=', $date_to)
+            ->where('tanggal_akhir', '>=', $date_from)->whereHas('t_libur_d', function ($query) use ($kary) {
+                $query->where('m_kary_id', $kary['id']);
+            })->get();
+
+        $liburDates = collect();
+        foreach ($getLiburKary as $libur) {
+            $start = \Carbon::parse($libur->tanggal_mulai);
+            $end = \Carbon::parse($libur->tanggal_akhir);
+            while ($start->lte($end)) {
+                $liburDates->push($start->toDateString());
+                $start->addDay();
+            }
+        }
+
         $getPresensi = presensi_absensi::where('default_user_id', $getUserId->id)
             ->where('status', 'ATTEND')
-            ->whereRaw("tanggal >= ? and tanggal <= ?", [$date_from, $date_to])
-            //->whereRaw("EXTRACT(DOW FROM tanggal) != 0")
-            //->whereNotIn('tanggal', $liburNasional)
-            ;
-
-        //dd($jamKerja, $liburNasional, $getPresensi);
+            ->whereRaw("tanggal >= ? and tanggal <= ?", [$date_from, $date_to]);
 
         $getMinute = clone $getPresensi;
         $getMinute = $getMinute->get();
 
-
         if ($getUserId['no_break_needed']) {
             foreach ($getMinute as $single) {
+                $tglCarbon = \Carbon::parse($single['tanggal']);
+                $tglStr = $tglCarbon->toDateString();
+                $isHariMerah = ($tglCarbon->dayOfWeek === 0) || in_array($tglStr, $liburNasional) || $liburDates->contains($tglStr);
+
                 $checkin = \Carbon::parse($single['tanggal'] . $single['checkin_time']);
                 $checkout = \Carbon::parse($single['tanggal'] . $single['checkout_time']);
 
@@ -3456,10 +3489,23 @@ class PerhitunganGaji
                     $extraWorkMinutes = $actualEnd->diffInMinutes($lemburStart);
                 }
 
+                $leaveEarlyThisDay = 0;
                 if ($actualEnd->lessThan($workEndLimit)) {
-                    $leaveEarly += $this->leaveEarlyFunc($workStartLimit->copy(), $limitDayWithoutBreak, $actualEnd->copy());
-                    $leaveEarlyCount++;
+                    $leaveEarlyThisDay = $this->leaveEarlyFunc($workStartLimit->copy(), $limitDayWithoutBreak, $actualEnd->copy());
                 }
+
+                if ($leaveEarlyThisDay > 0) {
+                    $leaveEarly += $leaveEarlyThisDay;
+                    $leaveEarlyCount++;
+                    if ($isHariMerah) {
+                        $leaveEarlyMerah += $leaveEarlyThisDay;
+                        $leaveEarlyCountMerah++;
+                    } else {
+                        $leaveEarlyBiasa += $leaveEarlyThisDay;
+                        $leaveEarlyCountBiasa++;
+                    }
+                }
+
                 $workMinute += $normalWorkMinutes;
                 $overtimeMinute += $extraWorkMinutes;
                 $missingCheck += $single['missing_check'];
@@ -3472,6 +3518,10 @@ class PerhitunganGaji
             }
         } else {
             foreach ($getMinute as $single) {
+                $tglCarbon = \Carbon::parse($single['tanggal']);
+                $tglStr = $tglCarbon->toDateString();
+                $isHariMerah = ($tglCarbon->dayOfWeek === 0) || in_array($tglStr, $liburNasional) || $liburDates->contains($tglStr);
+
                 $checkin = \Carbon::parse($single['tanggal'] . $single['checkin_time']);
                 $istirahat = \Carbon::parse($single['tanggal'] . $single['checkout_istirahat_time']);
                 $kerja = \Carbon::parse($single['tanggal'] . $single['checkin_kerja_time']);
@@ -3495,26 +3545,34 @@ class PerhitunganGaji
                 $extraWorkMinutes = 0;
                 if ($actualEnd->greaterThan($lemburThreshold)) {
                     // If checkout after 17:15, count overtime from 17:00
-                    
                     $extraWorkMinutes = $actualEnd->diffInMinutes($lemburStart);
                 }
 
-                // dd($actualEnd, $workEndLimit);
                 $breakTime = $actualEnd->copy()->setTime(12, 0, 0);
                 $toleranceMinutes = 6;
                 $breakWithTolerance = $breakTime->copy()->addMinutes($toleranceMinutes);
 
+                $leaveEarlyThisDay = 0;
                 if ($actualEnd->lessThan($workEndLimit)) {
-                    // dd($single);
                     if($actualEnd->lessThan($breakWithTolerance)){
-                        $leaveEarly += $this->leaveEarlyFunc($workStartLimit->copy(), $limitDayWithoutBreak, $actualEnd->copy());
-                        $leaveEarlyCount++;
-
+                        $leaveEarlyThisDay = $this->leaveEarlyFunc($workStartLimit->copy(), $limitDayWithoutBreak, $actualEnd->copy());
                     }else{
-                        $leaveEarly += $this->leaveEarlyFunc($workStartLimit->copy(), $limitDay, $actualEnd->copy());
-                        $leaveEarlyCount++;
+                        $leaveEarlyThisDay = $this->leaveEarlyFunc($workStartLimit->copy(), $limitDay, $actualEnd->copy());
                     }
                 }
+
+                if ($leaveEarlyThisDay > 0) {
+                    $leaveEarly += $leaveEarlyThisDay;
+                    $leaveEarlyCount++;
+                    if ($isHariMerah) {
+                        $leaveEarlyMerah += $leaveEarlyThisDay;
+                        $leaveEarlyCountMerah++;
+                    } else {
+                        $leaveEarlyBiasa += $leaveEarlyThisDay;
+                        $leaveEarlyCountBiasa++;
+                    }
+                }
+
                 $workMinute += $normalWorkMinutes;
                 $overtimeMinute += $extraWorkMinutes;
                 $missingCheck += $single['missing_check'];
@@ -3555,7 +3613,11 @@ class PerhitunganGaji
             'overtime_minute' => $overtimeMinute,
             'late_minute' => $lateMinute,
             'leave_early' => $leaveEarly,
+            'leave_early_biasa' => $leaveEarlyBiasa,
+            'leave_early_merah' => $leaveEarlyMerah,
             'leave_early_count' => $leaveEarlyCount,
+            'leave_early_count_biasa' => $leaveEarlyCountBiasa,
+            'leave_early_count_merah' => $leaveEarlyCountMerah,
             'late_count' => $lateCount,
             'over_break_minute' => $overBreakMinute,
             'over_break_minute_per_day' => $overBreakMinutePerDay,
@@ -4464,11 +4526,24 @@ class PerhitunganGaji
                             (float) $d->nominal / 8 / 60;
 
                         //denda pulang cepat
-                        if ($presensiMinute['leave_early'] > 0) {
+                        $leave_early_biasa = $presensiMinute['leave_early_biasa'] ?? ($presensiMinute['leave_early'] ?? 0);
+                        $leave_early_merah = $presensiMinute['leave_early_merah'] ?? 0;
+
+                        if ($leave_early_biasa > 0) {
                             $defaultColumns[] = [
-                                'label' => "Denda Pulang Cepat - " . $presensiMinute['leave_early'] . " Menit",
+                                'label' => "Denda Pulang Cepat - " . $leave_early_biasa . " Menit",
                                 'factor' => '-',
-                                'value' => $presensiMinute['leave_early'] * $gaji_menit,
+                                'value' => $leave_early_biasa * $gaji_menit,
+                                'type' => 'BULANAN',
+                                'can_adjust' => 1
+                            ];
+                        }
+
+                        if ($leave_early_merah > 0) {
+                            $defaultColumns[] = [
+                                'label' => "Denda Pulang Cepat Hari Merah - " . $leave_early_merah . " Menit",
+                                'factor' => '-',
+                                'value' => $leave_early_merah * ($gaji_menit * 2),
                                 'type' => 'BULANAN',
                                 'can_adjust' => 1
                             ];
@@ -4830,11 +4905,24 @@ class PerhitunganGaji
                             (float) $d->nominal / 8 / 60;
 
                         //denda pulang cepat
-                        if ($presensiMinute['leave_early'] > 0) {
+                        $leave_early_biasa = $presensiMinute['leave_early_biasa'] ?? ($presensiMinute['leave_early'] ?? 0);
+                        $leave_early_merah = $presensiMinute['leave_early_merah'] ?? 0;
+
+                        if ($leave_early_biasa > 0) {
                             $defaultColumns[] = [
-                                'label' => "Denda Pulang Cepat - " . $presensiMinute['leave_early'] . " Menit",
+                                'label' => "Denda Pulang Cepat - " . $leave_early_biasa . " Menit",
                                 'factor' => '-',
-                                'value' => $presensiMinute['leave_early'] * $gaji_menit,
+                                'value' => $leave_early_biasa * $gaji_menit,
+                                'type' => 'BULANAN',
+                                'can_adjust' => 1
+                            ];
+                        }
+
+                        if ($leave_early_merah > 0) {
+                            $defaultColumns[] = [
+                                'label' => "Denda Pulang Cepat Hari Merah - " . $leave_early_merah . " Menit",
+                                'factor' => '-',
+                                'value' => $leave_early_merah * ($gaji_menit * 2),
                                 'type' => 'BULANAN',
                                 'can_adjust' => 1
                             ];
@@ -4956,9 +5044,9 @@ class PerhitunganGaji
                         ];
                         continue;
                     }
-                    if ($keterangan === 'uang lembur hr merah') {
+                    if ($keterangan === 'uang lembur hr merah' || $keterangan === 'uang lembur hari merah' || (str_contains($keterangan, 'lembur') && (str_contains($keterangan, 'merah') || str_contains($keterangan, 'libur')))) {
 
-                        if ($presensi['kerja_di_hari_libur_count'] > 0) {
+                        if (($presensi['kerja_di_hari_libur_count'] ?? 0) > 0) {
                             $overtimeOnHoliday = $presensi['lembur_kerja_di_hari_libur'] ?? 0;
                         } else {
                             $overtimeOnHoliday = 0;
@@ -5321,11 +5409,24 @@ class PerhitunganGaji
                             (float) $d->nominal / 8 / 60;
 
                         //denda pulang cepat
-                        if ($presensiMinute['leave_early'] > 0) {
+                        $leave_early_biasa = $presensiMinute['leave_early_biasa'] ?? ($presensiMinute['leave_early'] ?? 0);
+                        $leave_early_merah = $presensiMinute['leave_early_merah'] ?? 0;
+
+                        if ($leave_early_biasa > 0) {
                             $defaultColumns[] = [
-                                'label' => "Denda Pulang Cepat - " . $presensiMinute['leave_early'] . " Menit",
+                                'label' => "Denda Pulang Cepat - " . $leave_early_biasa . " Menit",
                                 'factor' => '-',
-                                'value' => $presensiMinute['leave_early'] * $gaji_menit,
+                                'value' => $leave_early_biasa * $gaji_menit,
+                                'type' => 'BULANAN',
+                                'can_adjust' => 1
+                            ];
+                        }
+
+                        if ($leave_early_merah > 0) {
+                            $defaultColumns[] = [
+                                'label' => "Denda Pulang Cepat Hari Merah - " . $leave_early_merah . " Menit",
+                                'factor' => '-',
+                                'value' => $leave_early_merah * ($gaji_menit * 2),
                                 'type' => 'BULANAN',
                                 'can_adjust' => 1
                             ];
@@ -5448,9 +5549,9 @@ class PerhitunganGaji
                         ];
                         continue;
                     }
-                    if ($keterangan === 'uang lembur hr merah') {
+                    if ($keterangan === 'uang lembur hr merah' || $keterangan === 'uang lembur hari merah' || (str_contains($keterangan, 'lembur') && (str_contains($keterangan, 'merah') || str_contains($keterangan, 'libur')))) {
 
-                        if ($presensi['kerja_di_hari_libur_count'] > 0) {
+                        if (($presensi['kerja_di_hari_libur_count'] ?? 0) > 0) {
                             $overtimeOnHoliday = $presensi['lembur_kerja_di_hari_libur'] ?? 0;
                         } else {
                             $overtimeOnHoliday = 0;
@@ -5813,11 +5914,24 @@ class PerhitunganGaji
                             (float) $d->nominal / 8 / 60;
 
                         //denda pulang cepat
-                        if ($presensiMinute['leave_early'] > 0) {
+                        $leave_early_biasa = $presensiMinute['leave_early_biasa'] ?? ($presensiMinute['leave_early'] ?? 0);
+                        $leave_early_merah = $presensiMinute['leave_early_merah'] ?? 0;
+
+                        if ($leave_early_biasa > 0) {
                             $defaultColumns[] = [
-                                'label' => "Denda Pulang Cepat - " . $presensiMinute['leave_early'] . " Menit",
+                                'label' => "Denda Pulang Cepat - " . $leave_early_biasa . " Menit",
                                 'factor' => '-',
-                                'value' => $presensiMinute['leave_early'] * $gaji_menit,
+                                'value' => $leave_early_biasa * $gaji_menit,
+                                'type' => 'BULANAN',
+                                'can_adjust' => 1
+                            ];
+                        }
+
+                        if ($leave_early_merah > 0) {
+                            $defaultColumns[] = [
+                                'label' => "Denda Pulang Cepat Hari Merah - " . $leave_early_merah . " Menit",
+                                'factor' => '-',
+                                'value' => $leave_early_merah * ($gaji_menit * 2),
                                 'type' => 'BULANAN',
                                 'can_adjust' => 1
                             ];
@@ -5938,9 +6052,9 @@ class PerhitunganGaji
                         ];
                         continue;
                     }
-                    if ($keterangan === 'uang lembur hr merah') {
+                    if ($keterangan === 'uang lembur hr merah' || $keterangan === 'uang lembur hari merah' || (str_contains($keterangan, 'lembur') && (str_contains($keterangan, 'merah') || str_contains($keterangan, 'libur')))) {
 
-                        if ($presensi['kerja_di_hari_libur_count'] > 0) {
+                        if (($presensi['kerja_di_hari_libur_count'] ?? 0) > 0) {
                             $overtimeOnHoliday = $presensi['lembur_kerja_di_hari_libur'] ?? 0;
                         } else {
                             $overtimeOnHoliday = 0;
