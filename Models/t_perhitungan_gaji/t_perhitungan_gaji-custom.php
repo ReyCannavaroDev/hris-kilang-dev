@@ -39,7 +39,15 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
 
                 if ($req->m_dept_id) $kary = $kary->where('m_kary.m_dept_id', $req->m_dept_id);
                 if ($req->m_divisi_id) $kary = $kary->where('m_kary.m_divisi_id', $req->m_divisi_id);
-                if ($req->m_kary_id) $kary = $kary->where('m_kary.id', $req->m_kary_id);
+                if ($req->m_kary_id) {
+                    $karyIds = is_array($req->m_kary_id)
+                        ? array_map(fn($item) => is_array($item) ? ($item['id'] ?? null) : (is_object($item) ? ($item->id ?? null) : $item), $req->m_kary_id)
+                        : (is_string($req->m_kary_id) && strpos($req->m_kary_id, ',') !== false ? explode(',', $req->m_kary_id) : [$req->m_kary_id]);
+                    $karyIds = array_filter($karyIds);
+                    if (!empty($karyIds)) {
+                        $kary = $kary->whereIn('m_kary.id', $karyIds);
+                    }
+                }
                 $kary = $kary->get();
                 // dd($kary);
                 $date_from = \DateTime::createFromFormat('Y-m-d', $req->periode_awal . '-20');
@@ -91,7 +99,15 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
 
                 if ($req->m_dept_id) $kary = $kary->where('m_kary.m_dept_id', $req->m_dept_id);
                 if ($req->m_divisi_id) $kary = $kary->where('m_kary.m_divisi_id', $req->m_divisi_id);
-                if ($req->m_kary_id) $kary = $kary->where('m_kary.id', $req->m_kary_id);
+                if ($req->m_kary_id) {
+                    $karyIds = is_array($req->m_kary_id)
+                        ? array_map(fn($item) => is_array($item) ? ($item['id'] ?? null) : (is_object($item) ? ($item->id ?? null) : $item), $req->m_kary_id)
+                        : (is_string($req->m_kary_id) && strpos($req->m_kary_id, ',') !== false ? explode(',', $req->m_kary_id) : [$req->m_kary_id]);
+                    $karyIds = array_filter($karyIds);
+                    if (!empty($karyIds)) {
+                        $kary = $kary->whereIn('m_kary.id', $karyIds);
+                    }
+                }
 
 
                 $kary = $kary->get();
@@ -211,7 +227,15 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
         $model = $model->whereBetween('periode_in_date', [$date_from, $date_to]);
         if ($req->m_divisi_id) $model = $model->where('t_perhitungan_gaji.m_kary_divisi_id', $req->m_divisi_id);
         if ($req->m_dept_id) $model = $model->where('t_perhitungan_gaji.m_kary_dept_id', $req->m_dept_id);
-        if ($req->m_kary_id) $model = $model->where('t_perhitungan_gaji.m_kary_id', $req->m_kary_id);
+        if ($req->m_kary_id) {
+            $karyIds = is_array($req->m_kary_id)
+                ? array_map(fn($item) => is_array($item) ? ($item['id'] ?? null) : (is_object($item) ? ($item->id ?? null) : $item), $req->m_kary_id)
+                : (is_string($req->m_kary_id) && strpos($req->m_kary_id, ',') !== false ? explode(',', $req->m_kary_id) : [$req->m_kary_id]);
+            $karyIds = array_filter($karyIds);
+            if (!empty($karyIds)) {
+                $model = $model->whereIn('t_perhitungan_gaji.m_kary_id', $karyIds);
+            }
+        }
         if ($req->type_perhitungan == 'BORONGAN') $model = $model->where('t_perhitungan_gaji.type_perhitungan', 'BORONGAN');
         if ($req->type_perhitungan != 'BORONGAN') $model = $model->where('t_perhitungan_gaji.type_perhitungan', '!=', 'BORONGAN');
         return $model;

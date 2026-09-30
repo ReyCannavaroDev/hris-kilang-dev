@@ -45,7 +45,7 @@
             }" label="" placeholder="YYYY-MM-DD" />
         </div>
         <div>
-          <label class="font-semibold">Divisi<span class="text-red-500">*</span></label>
+          <label class="font-semibold">Divisi</label>
           <FieldSelect class="w-full py-2 !mt-0" :bind="{ disabled: !actionText, clearable: true }"
             :value="values.divisi" :check="false" @input="v => {
               values.divisi = v;
@@ -67,7 +67,7 @@
             }" fa-icon="search" :check="true" />
         </div>
         <div>
-          <label class="font-semibold">Departemen<span class="text-red-500">*</span></label>
+          <label class="font-semibold">Departemen</label>
           <FieldSelect class="w-full py-2 !mt-0" :bind="{ disabled: !actionText, clearable: true }"
             :value="values.m_dept_id" :check="false" @input="v => {
               values.m_dept_id = v;
@@ -89,8 +89,9 @@
         </div>
 
         <div>
-          <label class="font-semibold">Karyawan<span class="text-red-500">*</span></label>
-          <FieldSelect class="w-full py-2 !mt-0" :bind="{ disabled: !actionText, clearable: true }"
+          <label class="font-semibold">Karyawan</label>
+          <FieldSelect class="w-full py-2 !mt-0" :bind="{ disabled: !actionText, clearable: true, multiple: true }"
+            :multiple="true"
             :value="values.m_kary_id" :check="false" @input="v => {
               values.m_kary_id = v;
               detailArr = [];
