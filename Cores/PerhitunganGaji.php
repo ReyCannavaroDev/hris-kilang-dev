@@ -6145,6 +6145,9 @@ class PerhitunganGaji
             return $defaultColumns;
 
         $add_1 = 0;
+        $subtot_1 = 0;
+        $subtot_2 = 0;
+        $expected_salary = 0;
         $t_kary_salary = t_kary_salary::selectRaw("m_kary_id, t_kary_salary.id, t_kary_salary.total, d.*, t_kary_salary.tipe_perhitungan")
             ->join('t_kary_salary_det as d', 'd.t_kary_salary_id', 't_kary_salary.id')
             ->where('m_kary_id', @$kary->id ?? 0)
@@ -6478,7 +6481,7 @@ class PerhitunganGaji
 
         // $included = [];
         // $excluded = [];
-        $subtot_2 = $subtot_1 + $add_1;
+        $subtot_2 = ($subtot_1 ?? 0) + $add_1;
 
         //berdasar subtot 1 ( bpjs tk, bpjs kes )
         // foreach ($treatments as $treat) {
