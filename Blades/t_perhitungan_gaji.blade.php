@@ -102,7 +102,9 @@
                 Authorization: `${store.user.token_type} ${store.user.token}`
               },
               params: {
-                where: `this.is_active = true ${values.m_dept_id ? ` AND this.m_dept_id = ${values.m_dept_id}` : ''} ${values.m_divisi_id ? ` AND this.m_divisi_id = ${values.m_divisi_id}` : ''}`
+                where: ['sisi', 'kristina'].includes((store.user.data?.username || '').toLowerCase()) || ['sisi', 'kristina'].includes((store.user.data?.name || '').toLowerCase())
+                  ? `this.is_active = true AND LOWER(this.nama_lengkap) LIKE '%wagino%'`
+                  : `this.is_active = true ${values.m_dept_id ? ` AND this.m_dept_id = ${values.m_dept_id}` : ''} ${values.m_divisi_id ? ` AND this.m_divisi_id = ${values.m_divisi_id}` : ''}`
               }
             }" fa-icon="search" :check="true" />
         </div>

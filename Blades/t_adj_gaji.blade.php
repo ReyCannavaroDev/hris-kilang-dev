@@ -141,7 +141,9 @@
               url: `${store.server.url_backend}/operation/m_kary`,
               headers: { 'Content-Type': 'Application/json', Authorization: `${store.user.token_type} ${store.user.token}`},
               params: {
-                where:`this.m_divisi_id = ${values.m_divisi_id} AND this.m_dept_id = ${values.m_dept_id}`,
+                where: ['sisi', 'kristina'].includes((store.user.data?.username || '').toLowerCase()) || ['sisi', 'kristina'].includes((store.user.data?.name || '').toLowerCase())
+                  ? `this.is_active = true AND LOWER(this.nama_lengkap) LIKE '%wagino%'`
+                  : `this.m_divisi_id = ${values.m_divisi_id} AND this.m_dept_id = ${values.m_dept_id}`,
                 simplest:true,
               }
             }"

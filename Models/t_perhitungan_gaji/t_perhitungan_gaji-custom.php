@@ -23,11 +23,33 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
 
 
 
+    public static function isRestrictedUser(): bool
+    {
+        $currentUser = auth()->user();
+        if (!$currentUser) return false;
+        $username = strtolower($currentUser->username ?? '');
+        $name = strtolower($currentUser->name ?? '');
+        return in_array($username, ['sisi', 'kristina']) || in_array($name, ['sisi', 'kristina']);
+    }
+
+    protected static function boot()
+    {
+        parent::boot();
+        static::addGlobalScope('restrictUserKary', function ($builder) {
+            if (self::isRestrictedUser()) {
+                $builder->whereHas('m_kary', function($q) {
+                    $q->whereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                });
+            }
+        });
+    }
+
     public function generateSalary()
     {
         try {
             $req =  app()->request;
             // dd($req);
+            $isRestricted = self::isRestrictedUser();
 
             if ($req->periode_awal && $req->periode_akhir) {
                 $kary = m_kary::selectRaw("m_kary.*,m_general.value periode_text, m_dir.nama dir, m_divisi.nama divisi, m_dept.nama dept")
@@ -37,15 +59,19 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
                     ->join('m_general', 'm_general.id', 'm_kary.periode_gaji_id')
                     ->whereRaw('m_kary.m_standart_gaji_id in(select s.id from m_standart_gaji s where s.is_active = true)');
 
-                if ($req->m_dept_id) $kary = $kary->where('m_kary.m_dept_id', $req->m_dept_id);
-                if ($req->m_divisi_id) $kary = $kary->where('m_kary.m_divisi_id', $req->m_divisi_id);
-                if ($req->m_kary_id) {
-                    $karyIds = is_array($req->m_kary_id)
-                        ? array_map(fn($item) => is_array($item) ? ($item['id'] ?? null) : (is_object($item) ? ($item->id ?? null) : $item), $req->m_kary_id)
-                        : (is_string($req->m_kary_id) && strpos($req->m_kary_id, ',') !== false ? explode(',', $req->m_kary_id) : [$req->m_kary_id]);
-                    $karyIds = array_filter($karyIds);
-                    if (!empty($karyIds)) {
-                        $kary = $kary->whereIn('m_kary.id', $karyIds);
+                if ($isRestricted) {
+                    $kary = $kary->whereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                } else {
+                    if ($req->m_dept_id) $kary = $kary->where('m_kary.m_dept_id', $req->m_dept_id);
+                    if ($req->m_divisi_id) $kary = $kary->where('m_kary.m_divisi_id', $req->m_divisi_id);
+                    if ($req->m_kary_id) {
+                        $karyIds = is_array($req->m_kary_id)
+                            ? array_map(fn($item) => is_array($item) ? ($item['id'] ?? null) : (is_object($item) ? ($item->id ?? null) : $item), $req->m_kary_id)
+                            : (is_string($req->m_kary_id) && strpos($req->m_kary_id, ',') !== false ? explode(',', $req->m_kary_id) : [$req->m_kary_id]);
+                        $karyIds = array_filter($karyIds);
+                        if (!empty($karyIds)) {
+                            $kary = $kary->whereIn('m_kary.id', $karyIds);
+                        }
                     }
                 }
                 $kary = $kary->get();
@@ -97,15 +123,19 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
                     ->leftJoin('m_general', 'm_general.id', 'm_kary.periode_gaji_id')
                     ->whereRaw('m_kary.id in(select s.m_kary_id from t_kary_salary s where s.is_active = true) AND m_kary.is_active = true');
 
-                if ($req->m_dept_id) $kary = $kary->where('m_kary.m_dept_id', $req->m_dept_id);
-                if ($req->m_divisi_id) $kary = $kary->where('m_kary.m_divisi_id', $req->m_divisi_id);
-                if ($req->m_kary_id) {
-                    $karyIds = is_array($req->m_kary_id)
-                        ? array_map(fn($item) => is_array($item) ? ($item['id'] ?? null) : (is_object($item) ? ($item->id ?? null) : $item), $req->m_kary_id)
-                        : (is_string($req->m_kary_id) && strpos($req->m_kary_id, ',') !== false ? explode(',', $req->m_kary_id) : [$req->m_kary_id]);
-                    $karyIds = array_filter($karyIds);
-                    if (!empty($karyIds)) {
-                        $kary = $kary->whereIn('m_kary.id', $karyIds);
+                if ($isRestricted) {
+                    $kary = $kary->whereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                } else {
+                    if ($req->m_dept_id) $kary = $kary->where('m_kary.m_dept_id', $req->m_dept_id);
+                    if ($req->m_divisi_id) $kary = $kary->where('m_kary.m_divisi_id', $req->m_divisi_id);
+                    if ($req->m_kary_id) {
+                        $karyIds = is_array($req->m_kary_id)
+                            ? array_map(fn($item) => is_array($item) ? ($item['id'] ?? null) : (is_object($item) ? ($item->id ?? null) : $item), $req->m_kary_id)
+                            : (is_string($req->m_kary_id) && strpos($req->m_kary_id, ',') !== false ? explode(',', $req->m_kary_id) : [$req->m_kary_id]);
+                        $karyIds = array_filter($karyIds);
+                        if (!empty($karyIds)) {
+                            $kary = $kary->whereIn('m_kary.id', $karyIds);
+                        }
                     }
                 }
 
@@ -198,14 +228,22 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
 
     public function custom_save($req)
     {
-        $counter = count($req->detail);
+        $detail = $req->detail ?? [];
+        if (self::isRestrictedUser()) {
+            $waginoIds = m_kary::whereRaw("LOWER(nama_lengkap) LIKE '%wagino%'")->pluck('id')->toArray();
+            $detail = array_filter($detail, function($item) use ($waginoIds) {
+                return in_array($item['m_kary_id'] ?? null, $waginoIds);
+            });
+        }
+
+        $counter = count($detail);
         if ($counter) {
             $nomor = $this->helper->generateNomor('KODE PERHITUNGAN GAJI');
             if ($req->tipe == 'BORONGAN') {
                 $this->whereRaw("periode_in_date <= ? AND 
                     (periode_in_date + INTERVAL '7 days') >= ?", [$req->periode_akhir, $req->periode_awal])->delete();
             }
-            foreach ($req->detail as $key) {
+            foreach ($detail as $key) {
                 if ($req->tipe != 'BORONGAN') {
                     $checkAndDelete = $this->where('m_kary_id', @$key['m_kary_id'])->where('periode', @$key['periode'])->delete();
                 }
@@ -225,15 +263,22 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
         $date_to = \DateTime::createFromFormat('Y-m-d', $req->periode_akhir) ?? null;
 
         $model = $model->whereBetween('periode_in_date', [$date_from, $date_to]);
-        if ($req->m_divisi_id) $model = $model->where('t_perhitungan_gaji.m_kary_divisi_id', $req->m_divisi_id);
-        if ($req->m_dept_id) $model = $model->where('t_perhitungan_gaji.m_kary_dept_id', $req->m_dept_id);
-        if ($req->m_kary_id) {
-            $karyIds = is_array($req->m_kary_id)
-                ? array_map(fn($item) => is_array($item) ? ($item['id'] ?? null) : (is_object($item) ? ($item->id ?? null) : $item), $req->m_kary_id)
-                : (is_string($req->m_kary_id) && strpos($req->m_kary_id, ',') !== false ? explode(',', $req->m_kary_id) : [$req->m_kary_id]);
-            $karyIds = array_filter($karyIds);
-            if (!empty($karyIds)) {
-                $model = $model->whereIn('t_perhitungan_gaji.m_kary_id', $karyIds);
+
+        if (self::isRestrictedUser()) {
+            $model = $model->whereHas('m_kary', function($q) {
+                $q->whereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+            });
+        } else {
+            if ($req->m_divisi_id) $model = $model->where('t_perhitungan_gaji.m_kary_divisi_id', $req->m_divisi_id);
+            if ($req->m_dept_id) $model = $model->where('t_perhitungan_gaji.m_kary_dept_id', $req->m_dept_id);
+            if ($req->m_kary_id) {
+                $karyIds = is_array($req->m_kary_id)
+                    ? array_map(fn($item) => is_array($item) ? ($item['id'] ?? null) : (is_object($item) ? ($item->id ?? null) : $item), $req->m_kary_id)
+                    : (is_string($req->m_kary_id) && strpos($req->m_kary_id, ',') !== false ? explode(',', $req->m_kary_id) : [$req->m_kary_id]);
+                $karyIds = array_filter($karyIds);
+                if (!empty($karyIds)) {
+                    $model = $model->whereIn('t_perhitungan_gaji.m_kary_id', $karyIds);
+                }
             }
         }
         if ($req->type_perhitungan == 'BORONGAN') $model = $model->where('t_perhitungan_gaji.type_perhitungan', 'BORONGAN');
