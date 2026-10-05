@@ -29,7 +29,10 @@ class t_final_gaji_det extends \App\Models\BasicModels\t_final_gaji_det
         static::addGlobalScope('restrictUserKaryDet', function ($builder) {
             if (self::isRestrictedUser()) {
                 $builder->whereHas('m_kary', function($q) {
-                    $q->whereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                    $q->where(function($sub) {
+                        $sub->where('m_kary.is_proses_krani', true)
+                            ->orWhereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                    });
                 });
             }
         });

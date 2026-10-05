@@ -38,7 +38,10 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
         static::addGlobalScope('restrictUserKary', function ($builder) {
             if (self::isRestrictedUser()) {
                 $builder->whereHas('m_kary', function($q) {
-                    $q->whereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                    $q->where(function($sub) {
+                        $sub->where('m_kary.is_proses_krani', true)
+                            ->orWhereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                    });
                 });
             }
         });
@@ -60,7 +63,10 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
                     ->whereRaw('m_kary.m_standart_gaji_id in(select s.id from m_standart_gaji s where s.is_active = true)');
 
                 if ($isRestricted) {
-                    $kary = $kary->whereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                    $kary = $kary->where(function($q) {
+                        $q->where('m_kary.is_proses_krani', true)
+                          ->orWhereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                    });
                 } else {
                     if ($req->m_dept_id) $kary = $kary->where('m_kary.m_dept_id', $req->m_dept_id);
                     if ($req->m_divisi_id) $kary = $kary->where('m_kary.m_divisi_id', $req->m_divisi_id);
@@ -124,7 +130,10 @@ class t_perhitungan_gaji extends \App\Models\BasicModels\t_perhitungan_gaji
                     ->whereRaw('m_kary.id in(select s.m_kary_id from t_kary_salary s where s.is_active = true) AND m_kary.is_active = true');
 
                 if ($isRestricted) {
-                    $kary = $kary->whereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                    $kary = $kary->where(function($q) {
+                        $q->where('m_kary.is_proses_krani', true)
+                          ->orWhereRaw("LOWER(m_kary.nama_lengkap) LIKE '%wagino%'");
+                    });
                 } else {
                     if ($req->m_dept_id) $kary = $kary->where('m_kary.m_dept_id', $req->m_dept_id);
                     if ($req->m_divisi_id) $kary = $kary->where('m_kary.m_divisi_id', $req->m_divisi_id);

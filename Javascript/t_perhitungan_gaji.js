@@ -477,7 +477,33 @@ const landing = reactive({
     flex:1,
     filter: 'ColFilter',
     resizable: true,
-    cellClass: [ 'border-r', '!border-gray-200', 'justify-start']
+    cellClass: [ 'border-r', '!border-gray-200', 'justify-start'],
+    cellRenderer: ({ value }) => {
+      if (!value) return '';
+      const formatPart = (p) => {
+        const str = String(p).trim();
+        const matchYMD = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (matchYMD) {
+          const y = matchYMD[1].slice(-2);
+          const m = parseInt(matchYMD[2], 10);
+          const d = parseInt(matchYMD[3], 10);
+          return `${d}/${m}/${y}`;
+        }
+        const matchDMY = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+        if (matchDMY) {
+          const d = parseInt(matchDMY[1], 10);
+          const m = parseInt(matchDMY[2], 10);
+          const y = matchDMY[3].slice(-2);
+          return `${d}/${m}/${y}`;
+        }
+        return str;
+      };
+      if (typeof value === 'string' && value.includes(' - ')) {
+        const [start, end] = value.split(' - ');
+        return `${formatPart(start)} - ${formatPart(end)}`;
+      }
+      return formatPart(value);
+    }
   },
   {
     field: 'periode.value',

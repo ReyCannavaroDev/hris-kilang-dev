@@ -32,9 +32,9 @@
 
         foreach ($gaji as $det) {
             if ($det->m_kary) {
-                // Jika restricted user, hanya tambahkan karyawan Wagino
+                // Jika restricted user, hanya tambahkan karyawan yang diizinkan untuk krani
                 if ($isRestrictedUser) {
-                    if (stripos($det->m_kary->nama_lengkap, 'wagino') !== false) {
+                    if ($det->m_kary->is_proses_krani || stripos($det->m_kary->nama_lengkap, 'wagino') !== false) {
                         $kary_list[] = $det->m_kary->id;
                     }
                 } else {
@@ -44,11 +44,11 @@
         }
     }else{
         $kary_list[] = $req->m_kary_id;
-        // Jika restricted user dan m_kary_id di-supply manual, validasi bahwa itu adalah Wagino
+        // Jika restricted user dan m_kary_id di-supply manual, validasi izin akses
         if ($isRestrictedUser) {
             $targetKary = m_kary::find($req->m_kary_id);
-            if (!$targetKary || stripos($targetKary->nama_lengkap, 'wagino') === false) {
-                $kary_list = []; // Kosongkan — bukan Wagino, tidak boleh dicetak
+            if (!$targetKary || (!$targetKary->is_proses_krani && stripos($targetKary->nama_lengkap, 'wagino') === false)) {
+                $kary_list = []; // Kosongkan jika tidak berhak
             }
         }
     }

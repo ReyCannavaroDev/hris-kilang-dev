@@ -1145,6 +1145,20 @@
               :hints="formErrors.atas_nama_rek" :check="false" />
           </div>
         </div>
+        <div v-if="!isProfile" class="col-span-8 md:col-span-6">
+          <div class="grid grid-cols-12 items-center">
+            <label class="col-span-12 font-semibold">Hak Proses Gaji (Sekretaris / Krani)</label>
+            <div class="col-span-12 mt-2 flex items-center">
+              <input type="checkbox" id="is_proses_krani" :disabled="!actionText"
+                :checked="values.is_proses_krani"
+                @change="e => values.is_proses_krani = e.target.checked"
+                class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 mr-2" />
+              <label for="is_proses_krani" class="text-[13px] text-gray-700 cursor-pointer">
+                Bisa diproses oleh Sekretaris (Sisi & Kristina)
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
 
 

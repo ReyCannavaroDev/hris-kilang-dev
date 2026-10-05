@@ -20,6 +20,7 @@ class mkary extends Migration
             // $table->string('linkedin',100)->nullable();
             // $table->string('test_lagi');
             $table->boolean('is_active')->default(true)->nullable()->change();
+            $table->boolean('is_proses_krani')->default(false)->nullable();
 
         });
     }
