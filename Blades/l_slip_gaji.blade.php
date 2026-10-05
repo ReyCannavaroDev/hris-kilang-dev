@@ -97,7 +97,7 @@
                 url: `${store.server.url_backend}/operation/t_final_gaji_det`,
                 headers: { 'Content-Type': 'Application/json', Authorization: `${store.user.token_type} ${store.user.token}`},
                 params: {
-                  where :`this.t_final_gaji_id=${values.f_id}`,
+                  where: `this.t_final_gaji_id=${values.f_id}`,
                   simplest:true,
                   searchfield: 'm_kary.nik, m_kary.nama_depan, m_kary_dir.nama, m_kary_divisi.nama, m_kary_dept.nama'
                 }

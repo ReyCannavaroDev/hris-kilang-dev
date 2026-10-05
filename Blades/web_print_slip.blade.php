@@ -16,6 +16,15 @@
     $req = app()->request;
     $kary_list = [];
 
+    // Cek apakah user yang login adalah restricted user (sisi/kristina)
+    $currentUser = auth()->user();
+    $isRestrictedUser = false;
+    if ($currentUser) {
+        $username = strtolower($currentUser->username ?? '');
+        $name = strtolower($currentUser->name ?? '');
+        $isRestrictedUser = in_array($username, ['sisi', 'kristina']) || in_array($name, ['sisi', 'kristina']);
+    }
+
     if (!$req->m_kary_id) {
         $t_final_gaji = t_final_gaji::find($req->f_id);
 
@@ -23,11 +32,25 @@
 
         foreach ($gaji as $det) {
             if ($det->m_kary) {
-                $kary_list[] = $det->m_kary->id;
+                // Jika restricted user, hanya tambahkan karyawan Wagino
+                if ($isRestrictedUser) {
+                    if (stripos($det->m_kary->nama_lengkap, 'wagino') !== false) {
+                        $kary_list[] = $det->m_kary->id;
+                    }
+                } else {
+                    $kary_list[] = $det->m_kary->id;
+                }
             }
         }
     }else{
         $kary_list[] = $req->m_kary_id;
+        // Jika restricted user dan m_kary_id di-supply manual, validasi bahwa itu adalah Wagino
+        if ($isRestrictedUser) {
+            $targetKary = m_kary::find($req->m_kary_id);
+            if (!$targetKary || stripos($targetKary->nama_lengkap, 'wagino') === false) {
+                $kary_list = []; // Kosongkan — bukan Wagino, tidak boleh dicetak
+            }
+        }
     }
 @endphp
 <html lang="en">

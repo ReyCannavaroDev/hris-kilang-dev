@@ -34,6 +34,23 @@ const values = reactive({
   tipe: 'HTML'
 })
 
+// ------------------------------ DETEKSI RESTRICTED USER
+const akun = ref({})
+if (localStorage.getItem('user')) {
+  try {
+    const userData = JSON.parse(localStorage.getItem('user'))
+    if (userData && typeof userData === 'object') {
+      akun.value = userData
+    }
+  } catch (error) {
+    console.error('Gagal memparsing data user dari localStorage:', error)
+  }
+}
+
+const akunUsername = (akun.value?.data?.username ?? '').toLowerCase()
+const isRestrictedUser = ['sisi', 'kristina'].includes(akunUsername)
+
+
 const onGenerate = async () => {
   if (values.tipe === null) {
     swal.fire({
