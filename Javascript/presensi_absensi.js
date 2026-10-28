@@ -66,6 +66,28 @@ const formatDate = (year, month, day) => {
   return `${year}-${month}-${String(day).padStart(2, '0')}`;
 };
 
+const formatDMY = (dateStr) => {
+  if (!dateStr || dateStr === '-') return dateStr || '';
+  const str = String(dateStr).trim();
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, y, m, d] = match;
+    return `${d}-${m}-${y}`;
+  }
+  return str;
+};
+
+const formatDateTime = (dateTimeStr) => {
+  if (!dateTimeStr || dateTimeStr === '-') return '-';
+  const str = String(dateTimeStr).trim();
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (match) {
+    const [, y, m, d, h, min, s] = match;
+    return s ? `${d}-${m}-${y} ${h}:${min}:${s}` : `${d}-${m}-${y} ${h}:${min}`;
+  }
+  return str;
+};
+
 function getWeekNow(tDay, lgth) {
   let nowDay = parseInt(thisMonth.split('-')[2])
   let floorAvg = Math.floor(parseFloat(tDay ?? 0) / lgth ?? 4)
@@ -126,7 +148,7 @@ async function dayPerWeek(paramsFunc) {
 
   let weeksMap = weeks.map(week => ({
     value: week.startDate + '/' + week.endDate,
-    text: `${week.week} ${week.startDate}/${week.endDate}`
+    text: `${week.week} ${formatDMY(week.startDate)}/${formatDMY(week.endDate)}`
   }));
 
   weeksOptions.value = weeksMap

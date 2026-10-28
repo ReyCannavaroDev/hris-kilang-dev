@@ -55,7 +55,7 @@
     <span class="italic">Harap tunggu, kami sedang menyiapkan data untuk anda..</span> &#128522;
   </h2>
   <button  v-if="openDateSelected" @click="onBackReal" class="bg-blue-500 mb-2 text-white hover:bg-blue-600 rounded-[6px] py-2 px-[12.5px]">Kembail ke list</button>
-  <h3 v-if="openDateSelected" class="font-semibold mb-2">Tanggal : {{openDateSelected}}</h3>
+  <h3 v-if="openDateSelected" class="font-semibold mb-2">Tanggal : {{formatDMY(openDateSelected)}}</h3>
   <div class="overflow-auto w-full rounded-lg">
   <table class="table-auto w-full " v-if="openDateSelected && dataByDateDetail.length">
     <thead class="bg-gray-500  font-semibold text-white text-[12px] ">
@@ -148,10 +148,10 @@
           </button>
         </td>
 <td class="text-center border-1 border-gray-500 px-3">
-  {{item.absensi.created_at.toLocaleString() }}
+  {{formatDateTime(item.absensi?.created_at)}}
 </td>
 <td class="text-center border-1 border-gray-500 px-3">
-  {{item.absensi?.updated_at.toLocaleString() }}
+  {{formatDateTime(item.absensi?.updated_at)}}
 </td>
 <td class="text-center border-1 border-gray-500 px-3">
   {{ item.absensi?.last_editor_nama }}
@@ -180,7 +180,7 @@
           :class="item.type == 'Hari Libur' ? 'bg-gray-500 text-white' : (item.type == 'Cuti Bersama' ? 'bg-red-400 text-white' : '')"
           :title="item.type">
           <td class="text-left border-1 border-gray-500 px-3">{{item.day_name_idn}}</td>
-          <td class="text-left border-1 border-gray-500 px-3">{{item.all_days_of_month}}</td>
+          <td class="text-left border-1 border-gray-500 px-3">{{formatDMY(item.all_days_of_month)}}</td>
           <td class="text-right border-1 border-gray-500 px-3">{{item.attend}}</td>
           <td class="text-right border-1 border-gray-500 px-3">{{item.cuti}}</td>
           <td class="text-right border-1 border-gray-500 px-3">{{item.alpha}}</td>
