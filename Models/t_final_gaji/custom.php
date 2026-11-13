@@ -633,33 +633,33 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                     $kodeKary,
                     $namaKary,
                     $nik,
-                    $gaji_periode,
-                    $pot_bpjs_kes,
-                    $pot_bpjs_tk,
-                    $gaji_diterima,
-                    $management_fee,
-                    $ppn_fee,
-                    $pph_fee,
-                    $total_l,
+                    (float) $gaji_periode,
+                    (float) $pot_bpjs_kes,
+                    (float) $pot_bpjs_tk,
+                    (float) $gaji_diterima,
+                    (float) $management_fee,
+                    (float) $ppn_fee,
+                    (float) $pph_fee,
+                    (float) $total_l,
                     '',
                     '',
                     $no,
                     $kodeKary,
                     $namaKary,
-                    $dasar_kes,
-                    $kes_perusahaan,
-                    $kes_tk,
-                    $kes_total,
+                    (float) $dasar_kes,
+                    (float) $kes_perusahaan,
+                    (float) $kes_tk,
+                    (float) $kes_total,
                     '',
                     $no,
                     $kodeKary,
                     $namaKary,
-                    $dasar_tk,
-                    $tk_perusahaan,
-                    $tk_tk,
-                    $tk_total,
+                    (float) $dasar_tk,
+                    (float) $tk_perusahaan,
+                    (float) $tk_tk,
+                    (float) $tk_total,
                     '',
-                    $gaji_bruto
+                    (float) $gaji_bruto
                 ]);
 
                 // Akumulasi Total
@@ -689,34 +689,123 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
             // Baris Total Penjumlahan di paling bawah
             $rows->push([
                 '', '', '', '',
-                $sum_gaji_periode,
-                $sum_pot_kes,
-                $sum_pot_tk,
-                $sum_gaji_diterima,
-                $sum_fee > 0 ? $sum_fee : '',
-                $sum_ppn > 0 ? $sum_ppn : '',
-                $sum_pph != 0 ? $sum_pph : '',
-                $sum_total,
+                (float) $sum_gaji_periode,
+                $sum_pot_kes > 0 ? (float) $sum_pot_kes : 0.0,
+                $sum_pot_tk > 0 ? (float) $sum_pot_tk : 0.0,
+                (float) $sum_gaji_diterima,
+                $sum_fee > 0 ? (float) $sum_fee : '',
+                $sum_ppn > 0 ? (float) $sum_ppn : '',
+                $sum_pph != 0 ? (float) $sum_pph : '',
+                (float) $sum_total,
                 '', '', '', '', '',
-                $sum_dasar_kes,
-                $sum_kes_perusahaan,
-                $sum_kes_tk,
-                $sum_kes_total,
+                $sum_dasar_kes > 0 ? (float) $sum_dasar_kes : 0.0,
+                $sum_kes_perusahaan > 0 ? (float) $sum_kes_perusahaan : 0.0,
+                $sum_kes_tk > 0 ? (float) $sum_kes_tk : 0.0,
+                $sum_kes_total > 0 ? (float) $sum_kes_total : 0.0,
                 '', '', '', '',
-                $sum_dasar_tk,
-                $sum_tk_perusahaan,
-                $sum_tk_tk,
-                $sum_tk_total,
+                $sum_dasar_tk > 0 ? (float) $sum_dasar_tk : 0.0,
+                $sum_tk_perusahaan > 0 ? (float) $sum_tk_perusahaan : 0.0,
+                $sum_tk_tk > 0 ? (float) $sum_tk_tk : 0.0,
+                $sum_tk_total > 0 ? (float) $sum_tk_total : 0.0,
                 '',
-                $sum_bruto
+                (float) $sum_bruto
             ]);
 
             $fileName = 'rekap-gaji-bpjs-' . \Carbon\Carbon::now()->format('YmdHis') . '.xlsx';
 
-            return Excel::download(new class($rows) implements \Maatwebsite\Excel\Concerns\FromCollection {
+            $export = new class($rows) implements
+                \Maatwebsite\Excel\Concerns\FromCollection,
+                \Maatwebsite\Excel\Concerns\WithEvents
+            {
                 public function __construct(public \Illuminate\Support\Collection $rows) {}
-                public function collection() { return $this->rows; }
-            }, $fileName, \Maatwebsite\Excel\Excel::XLSX);
+
+                public function collection()
+                {
+                    return $this->rows;
+                }
+
+                public function registerEvents(): array
+                {
+                    return [
+                        \Maatwebsite\Excel\Events\AfterSheet::class => function (\Maatwebsite\Excel\Events\AfterSheet $event) {
+                            $sheet = $event->sheet->getDelegate();
+                            $totalRow = $this->rows->count();
+
+                            // 1. Merge Header Sesuai Template Acuan Pak Adi
+                            $merges = [
+                                'E1:E2', 'F1:G2', 'H1:H4', 'L1:L4', 'O1:O4', 'R1:R2', 'S1:T2', 'W1:W4', 'Z1:Z2', 'AA1:AB2',
+                                'C2:C3', 'D2:D3', 'Q2:Q3', 'U2:U3', 'Y2:Y3', 'AC2:AC3',
+                                'F3:F4', 'G3:G4', 'R3:R4', 'S3:S4', 'T3:T4', 'Z3:Z4', 'AA3:AA4', 'AB3:AB4'
+                            ];
+                            foreach ($merges as $range) {
+                                $sheet->mergeCells($range);
+                            }
+
+                            // 2. Set Lebar Kolom Proporsional (Sesuai Template Pak Adi)
+                            $widths = [
+                                'A' => 6, 'B' => 14, 'C' => 38, 'D' => 20, 'E' => 18, 'F' => 16, 'G' => 16, 'H' => 18,
+                                'I' => 16, 'J' => 16, 'K' => 16, 'L' => 18, 'M' => 10, 'N' => 10, 'O' => 6, 'P' => 14,
+                                'Q' => 38, 'R' => 18, 'S' => 16, 'T' => 16, 'U' => 18, 'V' => 10, 'W' => 6, 'X' => 14,
+                                'Y' => 38, 'Z' => 18, 'AA' => 16, 'AB' => 16, 'AC' => 18, 'AD' => 10, 'AE' => 22
+                            ];
+                            foreach ($widths as $col => $w) {
+                                $sheet->getColumnDimension($col)->setWidth($w);
+                            }
+
+                            // 3. Styling Font & Alignment Header (Baris 1 - 5)
+                            $sheet->getStyle('A1:AE5')->getAlignment()
+                                ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)
+                                ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+                            $sheet->getStyle('A1:AE5')->getFont()->setName('Calibri')->setSize(10);
+
+                            // Header Tebal Spesifik
+                            foreach (['S1', 'AA1', 'E3', 'R3', 'Z3', 'H1', 'L1', 'AE2', 'AE4'] as $cell) {
+                                $sheet->getStyle($cell)->getFont()->setBold(true);
+                            }
+
+                            // 4. Alignment Data Karyawan (Baris 6 s/d Baris Total)
+                            $sheet->getStyle("A6:B{$totalRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                            $sheet->getStyle("C6:C{$totalRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
+                            $sheet->getStyle("D6:D{$totalRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+                            $sheet->getStyle("O6:P{$totalRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                            $sheet->getStyle("Q6:Q{$totalRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
+
+                            $sheet->getStyle("W6:X{$totalRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+                            $sheet->getStyle("Y6:Y{$totalRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
+
+                            // 5. Format Angka & Rata Kanan Kolom Finansial
+                            $numFormat = '_(* #,##0.00_);_(* (#,##0.00);_(* "-"??_);_(@_)';
+                            $numCols = ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'R', 'S', 'T', 'U', 'Z', 'AA', 'AB', 'AC', 'AE'];
+                            foreach ($numCols as $col) {
+                                $sheet->getStyle("{$col}6:{$col}{$totalRow}")
+                                    ->getNumberFormat()
+                                    ->setFormatCode($numFormat);
+                                $sheet->getStyle("{$col}6:{$col}{$totalRow}")
+                                    ->getAlignment()
+                                    ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
+                            }
+
+                            // 6. Styling Baris Total (Garis tipis atas, ganda bawah seperti standar akuntansi)
+                            $sheet->getStyle("A{$totalRow}:AE{$totalRow}")->getFont()->setBold(true);
+                            $doubleBottom = [
+                                'borders' => [
+                                    'top' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN],
+                                    'bottom' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_DOUBLE],
+                                ]
+                            ];
+                            foreach (['E', 'F', 'G', 'H', 'L', 'R', 'S', 'T', 'U', 'Z', 'AA', 'AB', 'AC', 'AE'] as $col) {
+                                $sheet->getStyle("{$col}{$totalRow}")->applyFromArray($doubleBottom);
+                            }
+
+                            // Tampilkan Gridlines
+                            $sheet->setShowGridlines(true);
+                        }
+                    ];
+                }
+            };
+
+            return Excel::download($export, $fileName, \Maatwebsite\Excel\Excel::XLSX);
 
         } catch (\Exception $e) {
             return response()->json(['error' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);
@@ -827,7 +916,10 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
 
     private function formatNamaStatus($nama, $tanggungan)
     {
-        $tanggungan = str_replace('/', '', $tanggungan ?? '');
+        $tanggungan = strtoupper(trim(str_replace('/', '', $tanggungan ?? '')));
+        if (empty($tanggungan) || $tanggungan === 'TK0') {
+            $tanggungan = 'TK';
+        }
         return "{$nama} ({$tanggungan})";
     }
 
