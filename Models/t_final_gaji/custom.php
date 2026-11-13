@@ -781,15 +781,20 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                             $numFormat = '_(* #,##0.00_);_(* (#,##0.00);_(* "-"??_);_(@_)';
                             $numCols = ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'R', 'S', 'T', 'U', 'Z', 'AA', 'AB', 'AC', 'AE'];
 
-                            for ($r = 6; $r <= $totalRow - 1; $r++) {
-                                // Pastikan NIK disimpan sebagai text string murni (tanpa scientific notation & tanpa apostrof)
-                                $sheet->getCell("D{$r}")->setValueExplicit(
-                                    (string) $sheet->getCell("D{$r}")->getValue(),
-                                    \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
-                                );
+                            for ($r = 6; $r <= $totalRow; $r++) {
+                                if ($r < $totalRow) {
+                                    // Pastikan NIK disimpan sebagai text string murni (tanpa scientific notation & tanpa apostrof)
+                                    $sheet->getCell("D{$r}")->setValueExplicit(
+                                        (string) $sheet->getCell("D{$r}")->getValue(),
+                                        \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+                                    );
+                                }
 
                                 // Pastikan kolom numerik yang kosong terisi 0 (mencegah loose comparison bug PhpSpreadsheet)
                                 foreach ($numCols as $col) {
+                                    if ($r === $totalRow && in_array($col, ['I', 'J', 'K'])) {
+                                        continue;
+                                    }
                                     $cell = $sheet->getCell("{$col}{$r}");
                                     $val = $cell->getValue();
                                     if ($val === null || $val === '' || $val === '0' || $val === 0) {
