@@ -544,7 +544,7 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                 $kodeKary = $m_kary->kode ?? $m_kary->nik ?? '';
                 $tanggungan = $m_kary->tanggungan?->value ?? '';
                 $namaKary = $this->formatNamaStatus($m_kary->nama_lengkap, $tanggungan);
-                $nik = "'" . ($m_kary->nik ?? '');
+                $nik = (string) ($m_kary->nik ?? '');
 
                 // Kolom E: Gaji Periode sebelum potongan
                 $gaji_periode = (float) $data->total_gaji;
@@ -752,11 +752,14 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                                 $sheet->getColumnDimension($col)->setWidth($w);
                             }
 
-                            // 3. Styling Font & Alignment Header (Baris 1 - 5)
+                            // 3. Styling Font, Alignment & Borders Header (Baris 1 - 5)
                             $sheet->getStyle('A1:AE5')->getAlignment()
                                 ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER)
                                 ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
                             $sheet->getStyle('A1:AE5')->getFont()->setName('Calibri')->setSize(10);
+                            $sheet->getStyle('A1:AE5')->getBorders()->getAllBorders()->setBorderStyle(
+                                \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN
+                            );
 
                             // Header Tebal Spesifik
                             foreach (['S1', 'AA1', 'E3', 'R3', 'Z3', 'H1', 'L1', 'AE2', 'AE4'] as $cell) {
@@ -774,9 +777,28 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                             $sheet->getStyle("W6:X{$totalRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
                             $sheet->getStyle("Y6:Y{$totalRow}")->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
 
-                            // 5. Format Angka & Rata Kanan Kolom Finansial
+                            // 5. Penyelarasan NIK (Text) & Nilai 0 Eksplisit pada Kolom Finansial
                             $numFormat = '_(* #,##0.00_);_(* (#,##0.00);_(* "-"??_);_(@_)';
                             $numCols = ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'R', 'S', 'T', 'U', 'Z', 'AA', 'AB', 'AC', 'AE'];
+
+                            for ($r = 6; $r <= $totalRow - 1; $r++) {
+                                // Pastikan NIK disimpan sebagai text string murni (tanpa scientific notation & tanpa apostrof)
+                                $sheet->getCell("D{$r}")->setValueExplicit(
+                                    (string) $sheet->getCell("D{$r}")->getValue(),
+                                    \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+                                );
+
+                                // Pastikan kolom numerik yang kosong terisi 0 (mencegah loose comparison bug PhpSpreadsheet)
+                                foreach ($numCols as $col) {
+                                    $cell = $sheet->getCell("{$col}{$r}");
+                                    $val = $cell->getValue();
+                                    if ($val === null || $val === '' || $val === '0' || $val === 0) {
+                                        $cell->setValueExplicit(0, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
+                                    }
+                                }
+                            }
+
+                            // Format Angka & Rata Kanan Kolom Finansial
                             foreach ($numCols as $col) {
                                 $sheet->getStyle("{$col}6:{$col}{$totalRow}")
                                     ->getNumberFormat()
@@ -786,7 +808,11 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                                     ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
                             }
 
-                            // 6. Styling Baris Total (Garis tipis atas, ganda bawah seperti standar akuntansi)
+                            // 6. Styling Baris Total (Sesuai Template Pak Adi: I, J, K dikosongkan)
+                            $sheet->setCellValue("I{$totalRow}", null);
+                            $sheet->setCellValue("J{$totalRow}", null);
+                            $sheet->setCellValue("K{$totalRow}", null);
+
                             $sheet->getStyle("A{$totalRow}:AE{$totalRow}")->getFont()->setBold(true);
                             $doubleBottom = [
                                 'borders' => [
@@ -916,11 +942,13 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
 
     private function formatNamaStatus($nama, $tanggungan)
     {
+        $cleanNama = preg_replace('/\s+/', ' ', trim($nama ?? ''));
+        $namaFormatted = ucwords(strtolower($cleanNama));
         $tanggungan = strtoupper(trim(str_replace('/', '', $tanggungan ?? '')));
         if (empty($tanggungan) || $tanggungan === 'TK0') {
             $tanggungan = 'TK';
         }
-        return "{$nama} ({$tanggungan})";
+        return "{$namaFormatted} ({$tanggungan})";
     }
 
     public function decideCategory($status)
