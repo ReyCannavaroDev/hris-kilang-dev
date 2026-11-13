@@ -18,13 +18,14 @@ onBeforeMount(() => {
 
 const values = reactive({
   tipe: 'Excel',
+  format_laporan: 'Rekap Gaji & BPJS (Dasar TER)',
 });
 
 const onGenerate = async () => {
-  if (values.tipe === null) {
+  if (!values.f_id) {
     swal.fire({
       icon: 'error',
-      text: 'Harap Memilih Tipe Export Dahulu!',
+      text: 'Harap Memilih Final Gaji Terlebih Dahulu!',
     });
     return;
   }
@@ -37,7 +38,10 @@ const onGenerate = async () => {
   }
 
   const paramsGet = tempGet.join('&');
-  const url = `${store.server.url_backend}/operation/t_final_gaji/generateTaxReport?${paramsGet}`;
+  const action = values.format_laporan === 'Format e-Bupot DJP'
+    ? 'generateTaxReport'
+    : 'generateRekapGajiBpjsReport';
+  const url = `${store.server.url_backend}/operation/t_final_gaji/${action}?${paramsGet}`;
 
   try {
     const response = await fetch(url, {

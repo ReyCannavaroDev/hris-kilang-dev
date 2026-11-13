@@ -459,6 +459,270 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
         }
     }
 
+    public function custom_generateRekapGajiBpjsReport($req)
+    {
+        try {
+            $final = t_final_gaji::with([
+                't_final_gaji_det' => function ($q) {
+                    $q->orderBy('id', 'asc');
+                },
+                't_final_gaji_det.t_final_gaji_det_rincian'
+            ])->find($req->f_id);
+
+            if (!$final || !$final->t_final_gaji_det) {
+                return response()->json(['error' => 'Data final gaji tidak ditemukan.'], 404);
+            }
+
+            $periodeAwal = \Carbon\Carbon::parse($final->periode_awal);
+            $periodeAkhir = \Carbon\Carbon::parse($final->periode_akhir);
+            $bulanTahun = $periodeAkhir->locale('id')->translatedFormat('F Y');
+            $rentangTgl = $periodeAwal->format("dM'y") . '-' . $periodeAkhir->format("dM'y");
+
+            $rows = collect();
+
+            // Baris 1: Header Utama
+            $rows->push([
+                '', '', '', '', 'Periode', 'Pot BPJS', '', 'Gaji yang diterima', '', '', '', 'T O T A L',
+                '', '', 'NO', '', '', 'GAJI', 'BPJS Kesehatan', '', '',
+                '', 'NO', '', '', 'GAJI', 'BPJS Ketenagakerjaan', '', '', '', ''
+            ]);
+
+            // Baris 2: Sub-header Kolom
+            $rows->push([
+                'N', 'KODE', 'N A M A', 'N I K', '', '', '', '', 'Management', 'PPn', 'Potongan', '',
+                '', '', '', 'KODE', 'NAMA', '', '', '', 'TOTAL IURAN',
+                '', '', 'KODE', 'NAMA', '', '', '', 'TOTAL IURAN', '', 'Gaji sebelum potongan'
+            ]);
+
+            // Baris 3: Kategori & Keterangan Pengali
+            $rows->push([
+                'O', 'KARYAWAN', '', '', $bulanTahun, 'Kesehatan', 'Ketenagakerjaan', '', 'fee', 'management fee', 'PPh', '',
+                '', '', '', 'KARYAWAN', '', $bulanTahun, 'Perusahaan', 'Tenaga Kerja', '',
+                '', '', 'KARYAWAN', '', $bulanTahun, 'Perusahaan', 'Tenaga Kerja', '', '', '+'
+            ]);
+
+            // Baris 4: Rentang Tanggal & Keterangan Rumus
+            $rows->push([
+                '', '', '', '', $rentangTgl, '', '', '', '', '', '', '',
+                '', '', '', '', '', '', '', '', '',
+                '', '', '', '', '', '', '', '', '', 'BPJS yg dibayar perusahaan'
+            ]);
+
+            // Baris 5: Indeks Kolom 1 - 30
+            $rows->push([
+                '', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11',
+                '12', '13', '14', '15', '16', '17', '18', '19', '20',
+                '21', '22', '23', '24', '25', '26', '27', '28', '29', '30'
+            ]);
+
+            $no = 1;
+            $sum_gaji_periode = 0;
+            $sum_pot_kes = 0;
+            $sum_pot_tk = 0;
+            $sum_gaji_diterima = 0;
+            $sum_fee = 0;
+            $sum_ppn = 0;
+            $sum_pph = 0;
+            $sum_total = 0;
+
+            $sum_dasar_kes = 0;
+            $sum_kes_perusahaan = 0;
+            $sum_kes_tk = 0;
+            $sum_kes_total = 0;
+
+            $sum_dasar_tk = 0;
+            $sum_tk_perusahaan = 0;
+            $sum_tk_tk = 0;
+            $sum_tk_total = 0;
+
+            $sum_bruto = 0;
+
+            foreach ($final->t_final_gaji_det as $data) {
+                $m_kary = m_kary::with('tanggungan')->find($data->m_kary_id);
+                if (!$m_kary) continue;
+
+                $kodeKary = $m_kary->kode ?? $m_kary->nik ?? '';
+                $tanggungan = $m_kary->tanggungan?->value ?? '';
+                $namaKary = $this->formatNamaStatus($m_kary->nama_lengkap, $tanggungan);
+                $nik = "'" . ($m_kary->nik ?? '');
+
+                // Kolom E: Gaji Periode sebelum potongan
+                $gaji_periode = (float) $data->total_gaji;
+
+                // Kolom F: Potongan BPJS Kesehatan (pekerja)
+                $pot_bpjs_kes = (float) optional($data->t_final_gaji_det_rincian)
+                    ->filter(fn($item) => str_contains(strtolower($item->label ?? ''), 'kes') &&
+                                          str_contains(strtolower($item->label ?? ''), 'bpjs') &&
+                                          ($item->factor ?? '') === '-')
+                    ->sum('value');
+
+                // Kolom G: Potongan BPJS Ketenagakerjaan (pekerja)
+                $pot_bpjs_tk = (float) optional($data->t_final_gaji_det_rincian)
+                    ->filter(fn($item) => (str_contains(strtolower($item->label ?? ''), 'tk') || str_contains(strtolower($item->label ?? ''), 'ketenagakerjaan')) &&
+                                          str_contains(strtolower($item->label ?? ''), 'bpjs') &&
+                                          ($item->factor ?? '') === '-')
+                    ->sum('value');
+
+                // Kolom H: Gaji yang diterima (Col E - F - G)
+                $gaji_diterima = round($gaji_periode - $pot_bpjs_kes - $pot_bpjs_tk, 2);
+
+                // Kolom I, J, K: Management fee, PPn 11%, Potongan PPh 23 (-2%)
+                $management_fee = (float) optional($data->t_final_gaji_det_rincian)
+                    ->filter(fn($item) => str_contains(strtolower($item->label ?? ''), 'management fee'))
+                    ->sum('value');
+
+                $ppn_fee = $management_fee > 0 ? round($management_fee * 0.11, 2) : 0;
+                $pph_fee = $management_fee > 0 ? round(-0.02 * $management_fee, 2) : 0;
+
+                // Kolom L: Total Gaji diterima + fee + ppn + pph
+                $total_l = round($gaji_diterima + $management_fee + $ppn_fee + $pph_fee, 2);
+
+                // BPJS Kesehatan (Kolom R, S, T, U)
+                if ($pot_bpjs_kes > 0 || ($gaji_periode == 0 && str_starts_with($m_kary->kode ?? '', 'EMP') && !empty($m_kary->tgl_masuk))) {
+                    if ($pot_bpjs_kes == 110000) {
+                        $dasar_kes = 5500000;
+                    } elseif ($pot_bpjs_kes > 0) {
+                        $dasar_kes = round($pot_bpjs_kes / 0.01, 2);
+                    } else {
+                        $dasar_kes = 3531361;
+                    }
+                    $kes_perusahaan = round($dasar_kes * 0.04, 2);
+                    $kes_tk = round($dasar_kes * 0.01, 2);
+                    $kes_total = round($kes_perusahaan + $kes_tk, 2);
+                } else {
+                    $dasar_kes = 0;
+                    $kes_perusahaan = 0;
+                    $kes_tk = 0;
+                    $kes_total = 0;
+                }
+
+                // BPJS Ketenagakerjaan (Kolom Z, AA, AB, AC)
+                if ($pot_bpjs_tk > 0) {
+                    if ($pot_bpjs_tk == 165000) {
+                        $dasar_tk = 5500000;
+                        $tk_perusahaan = 378950;
+                        $tk_tk = 165000;
+                    } elseif ($pot_bpjs_tk == 135000) {
+                        $dasar_tk = 4500000;
+                        $tk_perusahaan = 310050;
+                        $tk_tk = 135000;
+                    } else {
+                        $dasar_tk = 3531361;
+                        $ratio = $pot_bpjs_tk / $dasar_tk;
+                        if ($ratio > 0.025) {
+                            $tk_perusahaan = round($dasar_tk * 0.0688999996, 2);
+                            $tk_tk = $pot_bpjs_tk;
+                        } else {
+                            $tk_perusahaan = round($dasar_tk * 0.0488999996, 2);
+                            $tk_tk = $pot_bpjs_tk;
+                        }
+                    }
+                    $tk_total = round($tk_perusahaan + $tk_tk, 2);
+                } else {
+                    $dasar_tk = 0;
+                    $tk_perusahaan = 0;
+                    $tk_tk = 0;
+                    $tk_total = 0;
+                }
+
+                // Kolom Terakhir: Penghasilan Bruto PPh 21 TER (Kolom E + Kolom S + Kolom AA)
+                $gaji_bruto = round($gaji_periode + $kes_perusahaan + $tk_perusahaan, 2);
+
+                $rows->push([
+                    $no,
+                    $kodeKary,
+                    $namaKary,
+                    $nik,
+                    $gaji_periode,
+                    $pot_bpjs_kes,
+                    $pot_bpjs_tk,
+                    $gaji_diterima,
+                    $management_fee,
+                    $ppn_fee,
+                    $pph_fee,
+                    $total_l,
+                    '',
+                    '',
+                    $no,
+                    $kodeKary,
+                    $namaKary,
+                    $dasar_kes,
+                    $kes_perusahaan,
+                    $kes_tk,
+                    $kes_total,
+                    '',
+                    $no,
+                    $kodeKary,
+                    $namaKary,
+                    $dasar_tk,
+                    $tk_perusahaan,
+                    $tk_tk,
+                    $tk_total,
+                    '',
+                    $gaji_bruto
+                ]);
+
+                // Akumulasi Total
+                $sum_gaji_periode += $gaji_periode;
+                $sum_pot_kes += $pot_bpjs_kes;
+                $sum_pot_tk += $pot_bpjs_tk;
+                $sum_gaji_diterima += $gaji_diterima;
+                $sum_fee += $management_fee;
+                $sum_ppn += $ppn_fee;
+                $sum_pph += $pph_fee;
+                $sum_total += $total_l;
+
+                $sum_dasar_kes += $dasar_kes;
+                $sum_kes_perusahaan += $kes_perusahaan;
+                $sum_kes_tk += $kes_tk;
+                $sum_kes_total += $kes_total;
+
+                $sum_dasar_tk += $dasar_tk;
+                $sum_tk_perusahaan += $tk_perusahaan;
+                $sum_tk_tk += $tk_tk;
+                $sum_tk_total += $tk_total;
+
+                $sum_bruto += $gaji_bruto;
+                $no++;
+            }
+
+            // Baris Total Penjumlahan di paling bawah
+            $rows->push([
+                '', '', '', '',
+                $sum_gaji_periode,
+                $sum_pot_kes,
+                $sum_pot_tk,
+                $sum_gaji_diterima,
+                $sum_fee > 0 ? $sum_fee : '',
+                $sum_ppn > 0 ? $sum_ppn : '',
+                $sum_pph != 0 ? $sum_pph : '',
+                $sum_total,
+                '', '', '', '', '',
+                $sum_dasar_kes,
+                $sum_kes_perusahaan,
+                $sum_kes_tk,
+                $sum_kes_total,
+                '', '', '', '',
+                $sum_dasar_tk,
+                $sum_tk_perusahaan,
+                $sum_tk_tk,
+                $sum_tk_total,
+                '',
+                $sum_bruto
+            ]);
+
+            $fileName = 'rekap-gaji-bpjs-' . \Carbon\Carbon::now()->format('YmdHis') . '.xlsx';
+
+            return Excel::download(new class($rows) implements \Maatwebsite\Excel\Concerns\FromCollection {
+                public function __construct(public \Illuminate\Support\Collection $rows) {}
+                public function collection() { return $this->rows; }
+            }, $fileName, \Maatwebsite\Excel\Excel::XLSX);
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Terjadi kesalahan: ' . $e->getMessage()], 500);
+        }
+    }
+
     public function custom_generateTaxReportOld($req)
     {
         try {

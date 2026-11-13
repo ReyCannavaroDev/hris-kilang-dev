@@ -11,11 +11,12 @@
       <div class="grid <md:grid-cols-1 grid-cols-2 gap-x-[60px] gap-y-[12px] px-4">
         <!-- START COLUMN -->
         <div>
-          <label class="font-semibold">Tipe Export</label>
-          <FieldSelect :bind="{ readonly: true, disabled: true }" class="w-full py-2 !mt-0" :value="values.tipe"
-            :errorText="formErrors.tipe ? 'failed' : ''" @input="v => values.tipe = v" :hints="formErrors.tipe"
-            :check="false" label="" :options="['Excel']" placeholder="Pilih Tipe Export" valueField="key"
-            displayField="key" />
+          <label class="font-semibold">Format Laporan</label>
+          <FieldSelect class="w-full py-2 !mt-0" :value="values.format_laporan"
+            :errorText="formErrors.format_laporan ? 'failed' : ''" @input="v => values.format_laporan = v"
+            :hints="formErrors.format_laporan" :check="false" label=""
+            :options="['Rekap Gaji & BPJS (Dasar TER)', 'Format e-Bupot DJP']" placeholder="Pilih Format Laporan"
+            valueField="key" displayField="key" />
         </div>
         <div>
           <label class="font-semibold">Pilih Final Gaji</label>
