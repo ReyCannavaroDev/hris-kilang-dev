@@ -546,22 +546,73 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                 $namaKary = $this->formatNamaStatus($m_kary->nama_lengkap, $tanggungan);
                 $nik = (string) ($m_kary->nik ?? '');
 
+                // Nomor baris di Excel (data dimulai dari baris ke-6)
+                $r = $no + 5;
+
                 // Kolom E: Gaji Periode sebelum potongan
                 $gaji_periode = (float) $data->total_gaji;
 
+                // Hitung usia karyawan untuk penentuan program BPJS Ketenagakerjaan (JHT vs JHT+JP)
+                $age = $m_kary->tgl_lahir ? \Carbon\Carbon::parse($m_kary->tgl_lahir)->age : 0;
+                if (!$age && !empty($m_kary->nik) && strlen((string)$m_kary->nik) >= 12) {
+                    $nikStr = (string) $m_kary->nik;
+                    $nikDd = (int) substr($nikStr, 6, 2);
+                    $nikMm = (int) substr($nikStr, 8, 2);
+                    $nikYy = (int) substr($nikStr, 10, 2);
+                    if ($nikDd > 40) $nikDd -= 40; // NIK perempuan: tanggal lahir + 40
+                    $year = ($nikYy > 30) ? (1900 + $nikYy) : (2000 + $nikYy);
+                    if ($nikMm >= 1 && $nikMm <= 12 && $nikDd >= 1 && $nikDd <= 31) {
+                        try {
+                            $birthDate = \Carbon\Carbon::create($year, $nikMm, $nikDd);
+                            $age = $birthDate->age;
+                        } catch (\Exception $e) {
+                            $age = 0;
+                        }
+                    }
+                }
+
                 // Kolom F: Potongan BPJS Kesehatan (pekerja)
                 $pot_bpjs_kes = (float) optional($data->t_final_gaji_det_rincian)
-                    ->filter(fn($item) => str_contains(strtolower($item->label ?? ''), 'kes') &&
-                                          str_contains(strtolower($item->label ?? ''), 'bpjs') &&
-                                          ($item->factor ?? '') === '-')
+                    ->filter(function($item) {
+                        $str = strtolower(($item->label ?? '') . ' ' . ($item->name ?? '') . ' ' . ($item->deskripsi ?? ''));
+                        $isKes = str_contains($str, 'kes') || str_contains($str, 'kesehatan');
+                        $isBPJS = str_contains($str, 'bpjs');
+                        $isDeduct = ($item->factor ?? '') === '-' || str_contains($str, 'potongan') || str_contains($str, 'iuran');
+                        return $isKes && ($isBPJS || $isDeduct);
+                    })
                     ->sum('value');
 
                 // Kolom G: Potongan BPJS Ketenagakerjaan (pekerja)
                 $pot_bpjs_tk = (float) optional($data->t_final_gaji_det_rincian)
-                    ->filter(fn($item) => (str_contains(strtolower($item->label ?? ''), 'tk') || str_contains(strtolower($item->label ?? ''), 'ketenagakerjaan')) &&
-                                          str_contains(strtolower($item->label ?? ''), 'bpjs') &&
-                                          ($item->factor ?? '') === '-')
+                    ->filter(function($item) {
+                        $str = strtolower(($item->label ?? '') . ' ' . ($item->name ?? '') . ' ' . ($item->deskripsi ?? ''));
+                        $isTK = (
+                            (str_contains($str, 'bpjs') && (str_contains($str, 'tk') || str_contains($str, 'tenaga kerja') || str_contains($str, 'ketenagakerjaan') || str_contains($str, 'ketenaga kerjaan'))) ||
+                            str_contains($str, 'bpjstk') ||
+                            str_contains($str, 'jht') ||
+                            str_contains($str, 'jamsostek') ||
+                            str_contains($str, 'pensiun') ||
+                            (str_contains($str, 'tenaga kerja') && (str_contains($str, 'potongan') || str_contains($str, 'iuran')))
+                        );
+                        $notKes = !str_contains($str, 'kes') && !str_contains($str, 'kesehatan');
+                        $isDeduct = ($item->factor ?? '') === '-' || str_contains($str, 'potongan') || str_contains($str, 'iuran') || ($item->factor ?? '') === '';
+                        return $isTK && $notKes && $isDeduct;
+                    })
                     ->sum('value');
+
+                // Fallback otomatis BPJS Ketenagakerjaan jika di rincian kosong namun BPJS Kesehatan terpotong
+                if ($pot_bpjs_tk <= 0 && $pot_bpjs_kes > 0) {
+                    if ($pot_bpjs_kes == 110000) {
+                        $pot_bpjs_tk = 165000.0;
+                    } elseif ($pot_bpjs_kes == 45000) {
+                        $pot_bpjs_tk = 135000.0;
+                    } else {
+                        // Standard UMSK: Rp 3.531.361
+                        // Usia >= 55 tahun: JHT 2% = Rp 70.627,22 (tanpa JP)
+                        // Usia < 55 tahun: JHT 2% + JP 1% = 3% = Rp 105.940,83
+                        $pot_bpjs_tk = ($age >= 55) ? 70627.22 : 105940.83;
+                    }
+                }
 
                 // Kolom H: Gaji yang diterima (Col E - F - G)
                 $gaji_diterima = round($gaji_periode - $pot_bpjs_kes - $pot_bpjs_tk, 2);
@@ -581,6 +632,8 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                 if ($pot_bpjs_kes > 0 || ($gaji_periode == 0 && str_starts_with($m_kary->kode ?? '', 'EMP') && !empty($m_kary->tgl_masuk))) {
                     if ($pot_bpjs_kes == 110000) {
                         $dasar_kes = 5500000;
+                    } elseif ($pot_bpjs_kes == 45000) {
+                        $dasar_kes = 4500000;
                     } elseif ($pot_bpjs_kes > 0) {
                         $dasar_kes = round($pot_bpjs_kes / 0.01, 2);
                     } else {
@@ -608,12 +661,11 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                         $tk_tk = 135000;
                     } else {
                         $dasar_tk = 3531361;
-                        $ratio = $pot_bpjs_tk / $dasar_tk;
-                        if ($ratio > 0.025) {
-                            $tk_perusahaan = round($dasar_tk * 0.0688999996, 2);
+                        if ($age >= 55 || ($pot_bpjs_tk / $dasar_tk) < 0.025) {
+                            $tk_perusahaan = round($dasar_tk * 0.0489, 2);
                             $tk_tk = $pot_bpjs_tk;
                         } else {
-                            $tk_perusahaan = round($dasar_tk * 0.0488999996, 2);
+                            $tk_perusahaan = round($dasar_tk * 0.0689, 2);
                             $tk_tk = $pot_bpjs_tk;
                         }
                     }
@@ -636,30 +688,30 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                     (float) $gaji_periode,
                     (float) $pot_bpjs_kes,
                     (float) $pot_bpjs_tk,
-                    (float) $gaji_diterima,
+                    "=E{$r}-F{$r}-G{$r}",
                     (float) $management_fee,
                     (float) $ppn_fee,
                     (float) $pph_fee,
-                    (float) $total_l,
+                    "=H{$r}+I{$r}+J{$r}+K{$r}",
                     '',
                     '',
                     $no,
                     $kodeKary,
                     $namaKary,
                     (float) $dasar_kes,
-                    (float) $kes_perusahaan,
-                    (float) $kes_tk,
-                    (float) $kes_total,
+                    $dasar_kes > 0 ? "=ROUND(R{$r}*0.04, 2)" : 0.0,
+                    $dasar_kes > 0 ? "=F{$r}" : 0.0,
+                    $dasar_kes > 0 ? "=S{$r}+T{$r}" : 0.0,
                     '',
                     $no,
                     $kodeKary,
                     $namaKary,
                     (float) $dasar_tk,
-                    (float) $tk_perusahaan,
-                    (float) $tk_tk,
-                    (float) $tk_total,
+                    $dasar_tk > 0 ? ($pot_bpjs_tk == 165000 ? 378950.0 : ($pot_bpjs_tk == 135000 ? 310050.0 : ($age >= 55 ? "=ROUND(Z{$r}*0.0489, 2)" : "=ROUND(Z{$r}*0.0689, 2)"))) : 0.0,
+                    $dasar_tk > 0 ? "=G{$r}" : 0.0,
+                    $dasar_tk > 0 ? "=AA{$r}+AB{$r}" : 0.0,
                     '',
-                    (float) $gaji_bruto
+                    "=E{$r}+S{$r}+AA{$r}"
                 ]);
 
                 // Akumulasi Total
@@ -686,29 +738,30 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                 $no++;
             }
 
-            // Baris Total Penjumlahan di paling bawah
+            // Baris Total Penjumlahan di paling bawah (Menggunakan Rumus Excel SUM)
+            $lastRow = $no + 4; // baris data terakhir
             $rows->push([
                 '', '', '', '',
-                (float) $sum_gaji_periode,
-                $sum_pot_kes > 0 ? (float) $sum_pot_kes : 0.0,
-                $sum_pot_tk > 0 ? (float) $sum_pot_tk : 0.0,
-                (float) $sum_gaji_diterima,
-                $sum_fee > 0 ? (float) $sum_fee : '',
-                $sum_ppn > 0 ? (float) $sum_ppn : '',
-                $sum_pph != 0 ? (float) $sum_pph : '',
-                (float) $sum_total,
-                '', '', '', '', '',
-                $sum_dasar_kes > 0 ? (float) $sum_dasar_kes : 0.0,
-                $sum_kes_perusahaan > 0 ? (float) $sum_kes_perusahaan : 0.0,
-                $sum_kes_tk > 0 ? (float) $sum_kes_tk : 0.0,
-                $sum_kes_total > 0 ? (float) $sum_kes_total : 0.0,
-                '', '', '', '',
-                $sum_dasar_tk > 0 ? (float) $sum_dasar_tk : 0.0,
-                $sum_tk_perusahaan > 0 ? (float) $sum_tk_perusahaan : 0.0,
-                $sum_tk_tk > 0 ? (float) $sum_tk_tk : 0.0,
-                $sum_tk_total > 0 ? (float) $sum_tk_total : 0.0,
+                "=SUM(E6:E{$lastRow})",
+                "=SUM(F6:F{$lastRow})",
+                "=SUM(G6:G{$lastRow})",
+                "=SUM(H6:H{$lastRow})",
                 '',
-                (float) $sum_bruto
+                '',
+                '',
+                "=SUM(L6:L{$lastRow})",
+                '', '', '', '', '',
+                "=SUM(R6:R{$lastRow})",
+                "=SUM(S6:S{$lastRow})",
+                "=SUM(T6:T{$lastRow})",
+                "=SUM(U6:U{$lastRow})",
+                '', '', '', '',
+                "=SUM(Z6:Z{$lastRow})",
+                "=SUM(AA6:AA{$lastRow})",
+                "=SUM(AB6:AB{$lastRow})",
+                "=SUM(AC6:AC{$lastRow})",
+                '',
+                "=SUM(AE6:AE{$lastRow})"
             ]);
 
             $fileName = 'rekap-gaji-bpjs-' . \Carbon\Carbon::now()->format('YmdHis') . '.xlsx';
