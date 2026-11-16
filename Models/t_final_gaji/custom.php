@@ -549,8 +549,35 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                 // Nomor baris di Excel (data dimulai dari baris ke-6)
                 $r = $no + 5;
 
-                // Kolom E: Gaji Periode sebelum potongan
-                $gaji_periode = (float) $data->total_gaji;
+                // Kolom E: Gaji Periode sebelum potongan (Total Penerimaan dikurangi Denda)
+                $total_penerimaan = (float) optional($data->t_final_gaji_det_rincian)
+                    ->filter(fn($item) => trim($item->factor ?? '') === '+')
+                    ->sum('value');
+
+                $total_denda = (float) optional($data->t_final_gaji_det_rincian)
+                    ->filter(function($item) {
+                        $str = strtolower(($item->label ?? '') . ' ' . ($item->name ?? '') . ' ' . ($item->deskripsi ?? ''));
+                        return trim($item->factor ?? '') === '-' && str_contains($str, 'denda');
+                    })
+                    ->sum('value');
+
+                if ($total_penerimaan > 0) {
+                    // Sesuai arahan Pak Adi: Gaji periode diambil dari Total Penerimaan - Denda
+                    $gaji_periode = round($total_penerimaan - $total_denda, 2);
+                } else {
+                    // Fallback jika rincian '+' tidak tersedia (misal data manual/draft):
+                    // Kembalikan dari total_gaji (Take Home Pay) ditambah potongan non-denda (BPJS & Kasbon/Pinjaman PT)
+                    $pot_non_denda = (float) optional($data->t_final_gaji_det_rincian)
+                        ->filter(function($item) {
+                            $str = strtolower(($item->label ?? '') . ' ' . ($item->name ?? '') . ' ' . ($item->deskripsi ?? ''));
+                            return trim($item->factor ?? '') === '-' && !str_contains($str, 'denda');
+                        })
+                        ->sum('value');
+                    $gaji_periode = round((float) $data->total_gaji + $pot_non_denda, 2);
+                    if ($gaji_periode < 0) {
+                        $gaji_periode = (float) $data->total_gaji;
+                    }
+                }
 
                 // Hitung usia karyawan untuk penentuan program BPJS Ketenagakerjaan (JHT vs JHT+JP)
                 $age = $m_kary->tgl_lahir ? \Carbon\Carbon::parse($m_kary->tgl_lahir)->age : 0;
