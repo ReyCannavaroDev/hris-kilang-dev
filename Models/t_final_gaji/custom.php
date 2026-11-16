@@ -632,15 +632,21 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                 if ($pot_bpjs_kes > 0 || ($gaji_periode == 0 && str_starts_with($m_kary->kode ?? '', 'EMP') && !empty($m_kary->tgl_masuk))) {
                     if ($pot_bpjs_kes == 110000) {
                         $dasar_kes = 5500000;
+                        $kes_perusahaan = 220000;
+                        $kes_tk = 110000;
                     } elseif ($pot_bpjs_kes == 45000) {
                         $dasar_kes = 4500000;
+                        $kes_perusahaan = 180000;
+                        $kes_tk = 45000;
                     } elseif ($pot_bpjs_kes > 0) {
-                        $dasar_kes = round($pot_bpjs_kes / 0.01, 2);
+                        $dasar_kes = 3531361;
+                        $kes_perusahaan = 141254.44;
+                        $kes_tk = 35313.61;
                     } else {
                         $dasar_kes = 3531361;
+                        $kes_perusahaan = 141254.44;
+                        $kes_tk = 35313.61;
                     }
-                    $kes_perusahaan = round($dasar_kes * 0.04, 2);
-                    $kes_tk = round($dasar_kes * 0.01, 2);
                     $kes_total = round($kes_perusahaan + $kes_tk, 2);
                 } else {
                     $dasar_kes = 0;
@@ -662,11 +668,11 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                     } else {
                         $dasar_tk = 3531361;
                         if ($age >= 55 || ($pot_bpjs_tk / $dasar_tk) < 0.025) {
-                            $tk_perusahaan = round($dasar_tk * 0.0489, 2);
-                            $tk_tk = $pot_bpjs_tk;
+                            $tk_perusahaan = 172683.55;
+                            $tk_tk = 70627.22;
                         } else {
-                            $tk_perusahaan = round($dasar_tk * 0.0689, 2);
-                            $tk_tk = $pot_bpjs_tk;
+                            $tk_perusahaan = 243310.77;
+                            $tk_tk = 105940.83;
                         }
                     }
                     $tk_total = round($tk_perusahaan + $tk_tk, 2);
@@ -688,30 +694,30 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                     (float) $gaji_periode,
                     (float) $pot_bpjs_kes,
                     (float) $pot_bpjs_tk,
-                    "=E{$r}-F{$r}-G{$r}",
+                    (float) $gaji_diterima,
                     (float) $management_fee,
                     (float) $ppn_fee,
                     (float) $pph_fee,
-                    "=H{$r}+I{$r}+J{$r}+K{$r}",
+                    (float) $total_l,
                     '',
                     '',
                     $no,
                     $kodeKary,
                     $namaKary,
                     (float) $dasar_kes,
-                    $dasar_kes > 0 ? "=ROUND(R{$r}*0.04, 2)" : 0.0,
-                    $dasar_kes > 0 ? "=F{$r}" : 0.0,
-                    $dasar_kes > 0 ? "=S{$r}+T{$r}" : 0.0,
+                    (float) $kes_perusahaan,
+                    (float) $kes_tk,
+                    (float) $kes_total,
                     '',
                     $no,
                     $kodeKary,
                     $namaKary,
                     (float) $dasar_tk,
-                    $dasar_tk > 0 ? ($pot_bpjs_tk == 165000 ? 378950.0 : ($pot_bpjs_tk == 135000 ? 310050.0 : ($age >= 55 ? "=ROUND(Z{$r}*0.0489, 2)" : "=ROUND(Z{$r}*0.0689, 2)"))) : 0.0,
-                    $dasar_tk > 0 ? "=G{$r}" : 0.0,
-                    $dasar_tk > 0 ? "=AA{$r}+AB{$r}" : 0.0,
+                    (float) $tk_perusahaan,
+                    (float) $tk_tk,
+                    (float) $tk_total,
                     '',
-                    "=E{$r}+S{$r}+AA{$r}"
+                    (float) $gaji_bruto
                 ]);
 
                 // Akumulasi Total
@@ -738,30 +744,29 @@ class t_final_gaji extends \App\Models\BasicModels\t_final_gaji
                 $no++;
             }
 
-            // Baris Total Penjumlahan di paling bawah (Menggunakan Rumus Excel SUM)
-            $lastRow = $no + 4; // baris data terakhir
+            // Baris Total Penjumlahan di paling bawah
             $rows->push([
                 '', '', '', '',
-                "=SUM(E6:E{$lastRow})",
-                "=SUM(F6:F{$lastRow})",
-                "=SUM(G6:G{$lastRow})",
-                "=SUM(H6:H{$lastRow})",
-                '',
-                '',
-                '',
-                "=SUM(L6:L{$lastRow})",
+                (float) $sum_gaji_periode,
+                $sum_pot_kes > 0 ? (float) $sum_pot_kes : 0.0,
+                $sum_pot_tk > 0 ? (float) $sum_pot_tk : 0.0,
+                (float) $sum_gaji_diterima,
+                $sum_fee > 0 ? (float) $sum_fee : '',
+                $sum_ppn > 0 ? (float) $sum_ppn : '',
+                $sum_pph != 0 ? (float) $sum_pph : '',
+                (float) $sum_total,
                 '', '', '', '', '',
-                "=SUM(R6:R{$lastRow})",
-                "=SUM(S6:S{$lastRow})",
-                "=SUM(T6:T{$lastRow})",
-                "=SUM(U6:U{$lastRow})",
+                $sum_dasar_kes > 0 ? (float) $sum_dasar_kes : 0.0,
+                $sum_kes_perusahaan > 0 ? (float) $sum_kes_perusahaan : 0.0,
+                $sum_kes_tk > 0 ? (float) $sum_kes_tk : 0.0,
+                $sum_kes_total > 0 ? (float) $sum_kes_total : 0.0,
                 '', '', '', '',
-                "=SUM(Z6:Z{$lastRow})",
-                "=SUM(AA6:AA{$lastRow})",
-                "=SUM(AB6:AB{$lastRow})",
-                "=SUM(AC6:AC{$lastRow})",
+                $sum_dasar_tk > 0 ? (float) $sum_dasar_tk : 0.0,
+                $sum_tk_perusahaan > 0 ? (float) $sum_tk_perusahaan : 0.0,
+                $sum_tk_tk > 0 ? (float) $sum_tk_tk : 0.0,
+                $sum_tk_total > 0 ? (float) $sum_tk_total : 0.0,
                 '',
-                "=SUM(AE6:AE{$lastRow})"
+                (float) $sum_bruto
             ]);
 
             $fileName = 'rekap-gaji-bpjs-' . \Carbon\Carbon::now()->format('YmdHis') . '.xlsx';
